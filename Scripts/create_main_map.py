@@ -1,0 +1,13 @@
+import unreal
+ws = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+ws.new_level("/Game/Maps/Store_Main")
+eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+eas.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0,0,500), unreal.Rotator(0,-45,30))
+eas.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0,0,0))
+eas.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0,0,300))
+eas.spawn_actor_from_class(unreal.ExponentialHeightFog, unreal.Vector(0,0,0))
+eas.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0,0,120))
+floor = eas.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0,0,0))
+floor.static_mesh_component.set_static_mesh(unreal.load_asset("/Engine/BasicShapes/Plane"))
+floor.set_actor_scale3d(unreal.Vector(40,40,1))
+ws.save_current_level()
