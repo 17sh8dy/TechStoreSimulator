@@ -1,0 +1,52 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Character.h"
+#include "TSSProducts.h"
+#include "TSSCharacter.generated.h"
+
+class UCameraComponent;
+class USpringArmComponent;
+class UStaticMeshComponent;
+class UTSSSettingsSubsystem;
+class ATSSInteractable;
+
+/** The shop owner. Switches between a first-person and third-person camera from the View settings. */
+UCLASS()
+class ATSSCharacter : public ACharacter
+{
+	GENERATED_BODY()
+
+public:
+	ATSSCharacter();
+
+	virtual void Tick(float DeltaSeconds) override;
+
+	ETSSProduct GetHeld() const { return Held; }
+	/** Pass None to empty the hands. */
+	void SetHeld(ETSSProduct Product);
+
+	/** What the crosshair is on, as a HUD prompt ("" when nothing). */
+	const FString& GetFocusPrompt() const { return FocusPrompt; }
+
+protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+
+private:
+	void ApplyView();
+	void UpdateFocus(class ATSSPlayerController* PC);
+
+	UPROPERTY(VisibleAnywhere) TObjectPtr<USpringArmComponent> SpringArm;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> HeldMesh;
+
+	ETSSProduct Held = ETSSProduct::None;
+	UPROPERTY() TObjectPtr<ATSSInteractable> Focus;
+	FHitResult FocusHit;
+	FString FocusPrompt;
+
+	FDelegateHandle SettingsHandle;
+	float LookSensitivity = 0.12f;
+};

@@ -3,6 +3,9 @@
 	"EngineAssociation": "5.8",
 	"Category": "Games",
 	"Description": "Tech Store Simulator - run and grow your own electronics store.",
+	"Modules": [
+		{ "Name": "TechStoreSimulator", "Type": "Runtime", "LoadingPhase": "Default" }
+	],
 	"Plugins": [
 		{ "Name": "ModelingToolsEditorMode", "Enabled": true, "TargetAllowList": [ "Editor" ] },
 		{ "Name": "EnhancedInput", "Enabled": true },
