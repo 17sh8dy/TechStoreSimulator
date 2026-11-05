@@ -2,6 +2,7 @@
 #include "TSSPlayerController.h"
 #include "TSSSettings.h"
 #include "TSSInteractable.h"
+#include "TSSHumanComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -28,29 +29,18 @@ ATSSCharacter::ATSSCharacter()
 	Camera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
 
 	// Placeholder avatar (engine primitives) so third person has something to look at.
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
 
-	auto AddPart = [this](const TCHAR* Name, UStaticMesh* PartMesh, FVector Loc, FVector Scale)
-	{
-		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-		Part->SetupAttachment(GetCapsuleComponent());
-		Part->SetStaticMesh(PartMesh);
-		Part->SetRelativeLocation(Loc);
-		Part->SetRelativeScale3D(Scale);
-		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Part->SetCastShadow(true);
-		BodyParts.Add(Part);
-	};
-	AddPart(TEXT("Torso"), Cylinder.Object, FVector(0.f, 0.f, -23.f), FVector(0.6f, 0.6f, 1.3f));
-	AddPart(TEXT("Head"), Sphere.Object, FVector(0.f, 0.f, 62.f), FVector(0.36f, 0.36f, 0.36f));
+	// The shop owner: a real person (feet at the capsule bottom, facing +X). Built in BeginPlay.
+	Human = CreateDefaultSubobject<UTSSHumanComponent>(TEXT("Human"));
+	Human->SetupAttachment(GetCapsuleComponent());
+	Human->SetRelativeLocation(FVector(0.f, 0.f, -88.f));
+	Human->SetRelativeRotation(FRotator(0.f, -90.f, 0.f)); // the kit's meshes face +Y
 	HeldMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldMesh"));
 	HeldMesh->SetupAttachment(GetCapsuleComponent());
 	HeldMesh->SetStaticMesh(Cube.Object);
 	HeldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HeldMesh->SetVisibility(false);
-	AddPart(TEXT("Nose"), Cube.Object, FVector(18.f, 0.f, 62.f), FVector(0.2f, 0.1f, 0.08f));
 }
 
 void ATSSCharacter::BeginPlay()
@@ -60,6 +50,7 @@ void ATSSCharacter::BeginPlay()
 	{
 		SettingsHandle = Settings->OnChanged.AddUObject(this, &ATSSCharacter::ApplyView);
 	}
+	Human->Build(2, TEXT("crewneck"), TEXT("jeansLong"), TEXT("oxfords"));
 	ApplyView();
 }
 
@@ -88,10 +79,7 @@ void ATSSCharacter::ApplyView()
 
 	bUseControllerRotationYaw = bFirstPerson;
 	GetCharacterMovement()->bOrientRotationToMovement = !bFirstPerson;
-	for (UStaticMeshComponent* Part : BodyParts)
-	{
-		Part->SetOwnerNoSee(bFirstPerson);
-	}
+	Human->SetHiddenFromOwner(bFirstPerson);
 }
 
 void ATSSCharacter::SetHeld(ETSSProduct Product)
@@ -136,6 +124,7 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 		return;
 	}
 
+	Human->SetWalking(GetVelocity().SizeSquared2D() > 400.f);
 	UpdateFocus(PC);
 	if (Focus)
 	{

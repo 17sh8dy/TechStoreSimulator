@@ -10,6 +10,7 @@ class ATSSRegister;
 class UCapsuleComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
+class UTSSHumanComponent;
 
 enum class ETSSCustomerState : uint8
 {
@@ -65,13 +66,7 @@ private:
 	void Animate(float Dt, bool bWalking);
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCapsuleComponent> Capsule;
-	UPROPERTY() TObjectPtr<USceneComponent> Visual;
-	UPROPERTY() TObjectPtr<USceneComponent> HipL;
-	UPROPERTY() TObjectPtr<USceneComponent> HipR;
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> Torso;
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> Head;
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> LegL;
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> LegR;
+	UPROPERTY() TObjectPtr<UTSSHumanComponent> Human;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> CarriedMesh;
 	UPROPERTY() TObjectPtr<UTextRenderComponent> Bubble;
 
@@ -92,7 +87,6 @@ private:
 	float LookTimer = 0.f;
 	float WaitedInLine = 0.f;
 	float BubbleTimer = 0.f;
-	float WalkPhase = 0.f;
 	bool bQueued = false;
 	bool bSaidHurry = false;
 };

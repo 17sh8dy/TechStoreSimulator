@@ -8,6 +8,7 @@
 class UCameraComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
+class UTSSHumanComponent;
 class UTSSSettingsSubsystem;
 class ATSSInteractable;
 
@@ -39,7 +40,7 @@ private:
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USpringArmComponent> SpringArm;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
-	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> BodyParts;
+	UPROPERTY() TObjectPtr<UTSSHumanComponent> Human;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> HeldMesh;
 
 	ETSSProduct Held = ETSSProduct::None;

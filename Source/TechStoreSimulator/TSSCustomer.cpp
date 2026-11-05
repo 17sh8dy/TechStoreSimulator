@@ -1,6 +1,7 @@
 #include "TSSCustomer.h"
 #include "TSSRegister.h"
 #include "TSSCharacter.h"
+#include "TSSHumanComponent.h"
 #include "TSSStoreSubsystem.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
@@ -27,41 +28,25 @@ ATSSCustomer::ATSSCustomer()
 	Capsule->SetCollisionResponseToAllChannels(ECR_Ignore);
 	Capsule->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
 
-	Visual = CreateDefaultSubobject<USceneComponent>(TEXT("Visual"));
-	Visual->SetupAttachment(Capsule);
+	// The person: feet on the floor (capsule bottom), facing +X.
+	Human = CreateDefaultSubobject<UTSSHumanComponent>(TEXT("Human"));
+	Human->SetupAttachment(Capsule);
+	Human->SetRelativeLocation(FVector(0.f, 0.f, -CapsuleHalf));
+	Human->SetRelativeRotation(FRotator(0.f, -90.f, 0.f)); // the kit's meshes face +Y
 
-	auto Part = [this](const TCHAR* Name, UStaticMesh* Mesh, USceneComponent* Parent, FVector Loc, FVector Scale)
-	{
-		UStaticMeshComponent* C = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-		C->SetupAttachment(Parent);
-		C->SetStaticMesh(Mesh);
-		C->SetRelativeLocation(Loc);
-		C->SetRelativeScale3D(Scale);
-		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		return C;
-	};
-
-	// Origin is the capsule centre (waist height); feet are at -90.
-	Torso = Part(TEXT("Torso"), Cylinder.Object, Visual, FVector(0.f, 0.f, 17.f), FVector(0.5f, 0.5f, 0.95f));
-	Head = Part(TEXT("Head"), Sphere.Object, Visual, FVector(0.f, 0.f, 75.f), FVector(0.28f, 0.28f, 0.28f));
-	HipL = CreateDefaultSubobject<USceneComponent>(TEXT("HipL"));
-	HipL->SetupAttachment(Visual);
-	HipL->SetRelativeLocation(FVector(0.f, -10.f, -30.f));
-	HipR = CreateDefaultSubobject<USceneComponent>(TEXT("HipR"));
-	HipR->SetupAttachment(Visual);
-	HipR->SetRelativeLocation(FVector(0.f, 10.f, -30.f));
-	LegL = Part(TEXT("LegL"), Cylinder.Object, HipL, FVector(0.f, 0.f, -30.f), FVector(0.16f, 0.16f, 0.6f));
-	LegR = Part(TEXT("LegR"), Cylinder.Object, HipR, FVector(0.f, 0.f, -30.f), FVector(0.16f, 0.16f, 0.6f));
-	CarriedMesh = Part(TEXT("Carried"), Cube.Object, Visual, FVector(34.f, 0.f, 5.f), FVector(0.2f, 0.2f, 0.2f));
+	CarriedMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Carried"));
+	CarriedMesh->SetupAttachment(Capsule);
+	CarriedMesh->SetStaticMesh(Cube.Object);
+	CarriedMesh->SetRelativeLocation(FVector(34.f, 0.f, 5.f));
+	CarriedMesh->SetRelativeScale3D(FVector(0.2f, 0.2f, 0.2f));
+	CarriedMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	CarriedMesh->SetVisibility(false);
 
 	Bubble = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Bubble"));
 	Bubble->SetupAttachment(Capsule);
-	Bubble->SetRelativeLocation(FVector(0.f, 0.f, 135.f));
+	Bubble->SetRelativeLocation(FVector(0.f, 0.f, 125.f));
 	Bubble->SetWorldSize(13.f);
 	Bubble->SetHorizontalAlignment(EHTA_Center);
 	Bubble->SetTextRenderColor(FColor::White);
@@ -75,15 +60,10 @@ void ATSSCustomer::Begin(ATSSRegister* InRegister, float InSpeedScale)
 	SpeedScale = InSpeedScale;
 	MaxMarkup = FMath::FRandRange(1.45f, 2.1f);
 
-	// A little variety so a crowd does not look cloned.
-	const FLinearColor Shirt = FLinearColor::MakeFromHSV8(static_cast<uint8>(FMath::RandRange(0, 255)), 170, 215);
-	static const FLinearColor Skin[] = {
-		FLinearColor(0.80f, 0.60f, 0.46f), FLinearColor(0.60f, 0.40f, 0.28f),
-		FLinearColor(0.36f, 0.23f, 0.16f), FLinearColor(0.92f, 0.76f, 0.64f) };
-	TSSApplyColor(Torso, Shirt);
-	TSSApplyColor(Head, Skin[FMath::RandRange(0, 3)]);
-	TSSApplyColor(LegL, FLinearColor(0.08f, 0.1f, 0.2f));
-	TSSApplyColor(LegR, FLinearColor(0.08f, 0.1f, 0.2f));
+	// Cast a person: face, clothes and shoes picked at random so a crowd does not look cloned.
+	auto Pick = [](const TArray<FString>& V) { return V[FMath::RandRange(0, V.Num() - 1)]; };
+	Human->Build(FMath::RandRange(1, UTSSHumanComponent::NumIdentities()),
+		Pick(UTSSHumanComponent::Tops()), Pick(UTSSHumanComponent::Bottoms()), Pick(UTSSHumanComponent::Shoes()));
 
 	SetActorLocation(FVector(Register->SpawnPoint.X, Register->SpawnPoint.Y, CapsuleHalf));
 	ChooseItem();
@@ -239,20 +219,7 @@ void ATSSCustomer::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 
 void ATSSCustomer::Animate(float Dt, bool bWalking)
 {
-	if (bWalking)
-	{
-		WalkPhase += Dt * SpeedScale * 9.f;
-		const float Swing = FMath::Sin(WalkPhase) * 30.f;
-		HipL->SetRelativeRotation(FRotator(Swing, 0.f, 0.f));
-		HipR->SetRelativeRotation(FRotator(-Swing, 0.f, 0.f));
-		Visual->SetRelativeLocation(FVector(0.f, 0.f, FMath::Abs(FMath::Sin(WalkPhase)) * 2.f));
-	}
-	else
-	{
-		HipL->SetRelativeRotation(FMath::RInterpTo(HipL->GetRelativeRotation(), FRotator::ZeroRotator, Dt, 12.f));
-		HipR->SetRelativeRotation(FMath::RInterpTo(HipR->GetRelativeRotation(), FRotator::ZeroRotator, Dt, 12.f));
-		Visual->SetRelativeLocation(FVector::ZeroVector);
-	}
+	Human->SetWalking(bWalking);
 }
 
 void ATSSCustomer::Tick(float Dt)

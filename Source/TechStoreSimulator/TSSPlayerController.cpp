@@ -9,6 +9,7 @@
 #include "TSSShelf.h"
 #include "TSSStoreSubsystem.h"
 #include "TSSCustomer.h"
+#include "TSSSettings.h"
 #include "TSSCustomerSubsystem.h"
 #include "TSSRegister.h"
 
@@ -256,7 +257,13 @@ void ATSSPlayerController::TSSCustomerTest()
 				// Frame the register for a screenshot, then ring up a second later.
 				St->bShot = true;
 				St->ShotAt = St->Elapsed;
-				ConsoleCommand(TEXT("TSSLook 600 -250 95 180 -6"));
+				{
+					// Stand behind the counter (owner's side) and look at the customer at the front of the line.
+					if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>()) Cfg->SetViewMode(ETSSViewMode::FirstPerson);
+					const FVector Me = Reg->GetActorLocation() + Reg->GetActorForwardVector() * 60.f;
+					const FVector To = Reg->QueueSpot(0) - Me;
+					ConsoleCommand(FString::Printf(TEXT("TSSLook %f %f 130 %f -8"), Me.X, Me.Y, To.Rotation().Yaw));
+				}
 				FTimerHandle T;
 				GetWorldTimerManager().SetTimer(T, [this]() { ConsoleCommand(TEXT("Shot ShowUI")); }, 0.5f, false);
 			}

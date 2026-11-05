@@ -4,3 +4,10 @@ Saved/
 DerivedDataCache/
 .vs/
 *.sln
+
+# City Sample content (Epic sample content; large, not redistributed in this repo)
+Content/Crowd/
+Content/Character/
+Content/Megascans/
+Content/Material/
+Content/Textures/
