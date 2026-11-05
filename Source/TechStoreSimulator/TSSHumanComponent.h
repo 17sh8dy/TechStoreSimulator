@@ -22,6 +22,8 @@ public:
 	void Build(int32 Identity, const FString& Top, const FString& Bottom, const FString& Shoes);
 	/** Idle or walk cycle. Cheap to call every frame. */
 	void SetWalking(bool bWalking);
+	/** Show or hide the whole person (the invisible leader skeleton stays hidden either way). */
+	void SetShown(bool bShown);
 	/** True hides the whole person from their own camera (first person). */
 	void SetHiddenFromOwner(bool bHidden);
 	/** How many of the Identity/outfit choices exist, for random casting. */

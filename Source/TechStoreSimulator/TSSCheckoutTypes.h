@@ -2,7 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "TSSProducts.h"
+#include "TSSCheckoutTypes.generated.h"
 
+UENUM()
 enum class ETSSPayMethod : uint8 { None, Cash, Card };
 
 /** Where the register is in a sale. */
@@ -37,17 +39,21 @@ struct FTSSSaleLine
 	int32 Total() const { return Qty * UnitPrice; }
 };
 
-/** A finished sale, as recorded in the store's books. */
+/** A finished sale, as recorded in the books (and saved). */
+USTRUCT()
 struct FTSSTransaction
 {
-	int32 Id = 0;
-	int32 Items = 0;
-	int32 Subtotal = 0;
-	int32 Tax = 0;
-	int32 Total = 0;
-	ETSSPayMethod Method = ETSSPayMethod::None;
-	int32 CashReceived = 0;
-	int32 Change = 0;
+	GENERATED_BODY()
+
+	UPROPERTY() int32 Id = 0;
+	UPROPERTY() int32 Items = 0;
+	UPROPERTY() int32 Subtotal = 0;
+	UPROPERTY() int32 Tax = 0;
+	UPROPERTY() int32 Total = 0;
+	UPROPERTY() ETSSPayMethod Method = ETSSPayMethod::None;
+	UPROPERTY() int32 CashReceived = 0;
+	UPROPERTY() int32 Change = 0;
+	UPROPERTY() int32 Day = 1;
 };
 
 namespace TSSMoney

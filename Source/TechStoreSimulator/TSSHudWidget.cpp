@@ -10,9 +10,9 @@
 
 namespace
 {
-	const FLinearColor Panel(0.015f, 0.025f, 0.04f, 0.72f);
-	const FLinearColor Accent(0.12f, 0.5f, 0.95f, 1.f);
-	const FLinearColor Muted(0.7f, 0.76f, 0.84f, 1.f);
+	const FLinearColor HudPanel(0.015f, 0.025f, 0.04f, 0.72f);
+	const FLinearColor HudAccent(0.12f, 0.5f, 0.95f, 1.f);
+	const FLinearColor HudMuted(0.7f, 0.76f, 0.84f, 1.f);
 }
 
 ATSSCharacter* UTSSHudWidget::GetPlayer() const
@@ -66,7 +66,7 @@ TSharedRef<SWidget> UTSSHudWidget::RebuildWidget()
 		[
 			SNew(SBorder)
 			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-			.BorderBackgroundColor(Panel)
+			.BorderBackgroundColor(HudPanel)
 			.Padding(FMargin(18.f, 12.f))
 			[
 				SNew(SVerticalBox)
@@ -75,21 +75,21 @@ TSharedRef<SWidget> UTSSHudWidget::RebuildWidget()
 					SNew(STextBlock)
 					.Text_UObject(this, &UTSSHudWidget::MoneyText)
 					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 30))
-					.ColorAndOpacity(Accent)
+					.ColorAndOpacity(HudAccent)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)
 				[
 					SNew(STextBlock)
 					.Text_UObject(this, &UTSSHudWidget::HeldText)
 					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 16))
-					.ColorAndOpacity(Muted)
+					.ColorAndOpacity(HudMuted)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)
 				[
 					SNew(STextBlock)
 					.Text_UObject(this, &UTSSHudWidget::SalesText)
 					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
-					.ColorAndOpacity(Muted)
+					.ColorAndOpacity(HudMuted)
 				]
 			]
 		]
@@ -109,7 +109,7 @@ TSharedRef<SWidget> UTSSHudWidget::RebuildWidget()
 			SNew(SBorder)
 			.Visibility_UObject(this, &UTSSHudWidget::PromptVisibility)
 			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-			.BorderBackgroundColor(Panel)
+			.BorderBackgroundColor(HudPanel)
 			.Padding(FMargin(20.f, 10.f))
 			[
 				SNew(STextBlock)

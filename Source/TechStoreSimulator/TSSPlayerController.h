@@ -6,6 +6,7 @@
 
 class UTSSMenuWidget;
 class UTSSHudWidget;
+class UTSSStoreDeskWidget;
 
 UCLASS()
 class ATSSPlayerController : public APlayerController
@@ -16,6 +17,16 @@ public:
 	virtual void PlayerTick(float DeltaTime) override;
 
 	bool IsGameActive() const { return bGameActive; }
+
+	/** StoreDesk: the business computer's full-screen interface. Gameplay input is off while it is open. */
+	void OpenStoreDesk();
+	void CloseStoreDesk();
+	bool IsDeskOpen() const { return bDeskOpen; }
+	UTSSStoreDeskWidget* GetDesk() const { return Desk; }
+	/** Debug: switch the open StoreDesk to a page (opens it if needed). */
+	UFUNCTION(Exec) void TSSDeskPage(int32 Page);
+	/** Debug: run the StoreDesk end-to-end test (ordering, delivery, upgrades, save) and log TSSTEST lines. */
+	UFUNCTION(Exec) void TSSDeskTest();
 
 	/** Called by the menu once the player has picked a view and pressed CONTINUE. */
 	void StartNewGame();
@@ -42,5 +53,7 @@ private:
 
 	UPROPERTY() TObjectPtr<UTSSMenuWidget> Menu;
 	UPROPERTY() TObjectPtr<UTSSHudWidget> Hud;
+	UPROPERTY() TObjectPtr<UTSSStoreDeskWidget> Desk;
+	bool bDeskOpen = false;
 	bool bGameActive = false;
 };

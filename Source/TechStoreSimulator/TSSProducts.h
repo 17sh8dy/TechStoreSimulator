@@ -23,6 +23,7 @@ struct FTSSProductDef
 	int32 WholesaleCost;
 	FVector BoxSize;
 	FLinearColor Color;
+	const TCHAR* Blurb = TEXT("");
 
 	/** How many of this box fit front-to-back in one shelf slot (shelf depth is 50 cm). */
 	int32 SlotCapacity() const { return FMath::Clamp(FMath::FloorToInt(46.f / BoxSize.X), 1, 4); }

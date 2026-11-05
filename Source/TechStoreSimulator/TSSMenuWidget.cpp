@@ -13,12 +13,12 @@
 
 namespace
 {
-	const FLinearColor DimColor(0.015f, 0.025f, 0.04f, 0.9f);
-	const FLinearColor Accent(0.12f, 0.5f, 0.95f, 1.f);
-	const FLinearColor Idle(0.12f, 0.15f, 0.2f, 1.f);
-	const FLinearColor Muted(0.62f, 0.68f, 0.75f, 1.f);
+	const FLinearColor MenuDim(0.015f, 0.025f, 0.04f, 0.9f);
+	const FLinearColor MenuAccent(0.12f, 0.5f, 0.95f, 1.f);
+	const FLinearColor MenuIdle(0.12f, 0.15f, 0.2f, 1.f);
+	const FLinearColor MenuMuted(0.62f, 0.68f, 0.75f, 1.f);
 
-	TSharedRef<STextBlock> Label(const FString& Text, int32 Size, bool bBold = false, FLinearColor Color = FLinearColor::White)
+	TSharedRef<STextBlock> MenuLabel(const FString& Text, int32 Size, bool bBold = false, FLinearColor Color = FLinearColor::White)
 	{
 		return SNew(STextBlock)
 			.Text(FText::FromString(Text))
@@ -41,7 +41,7 @@ TSharedRef<SWidget> UTSSMenuWidget::RebuildWidget()
 	Content->SetContent(BuildMain());
 	return SNew(SBorder)
 		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-		.BorderBackgroundColor(DimColor)
+		.BorderBackgroundColor(MenuDim)
 		.HAlign(HAlign_Center)
 		.VAlign(VAlign_Center)
 		[
@@ -119,11 +119,11 @@ FReply UTSSMenuWidget::OnBack() { HandleBack(); return FReply::Handled(); }
 TSharedRef<SWidget> UTSSMenuWidget::Header(const FString& Subtitle)
 {
 	return SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Label(TEXT("TECH STORE SIMULATOR"), 40, true) ]
-		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4, 0, 28)[ Label(TEXT("NOVAGAMES"), 14, false, Accent) ]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ MenuLabel(TEXT("TECH STORE SIMULATOR"), 40, true) ]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 4, 0, 28)[ MenuLabel(TEXT("NOVAGAMES"), 14, false, MenuAccent) ]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 0, 0, 24)
 		[
-			Label(Subtitle, 22, true)
+			MenuLabel(Subtitle, 22, true)
 		];
 }
 
@@ -135,9 +135,9 @@ TSharedRef<SWidget> UTSSMenuWidget::MenuButton(const FString& Text, FOnClicked O
 			.HAlign(HAlign_Center)
 			.ContentPadding(FMargin(0.f, 12.f))
 			.OnClicked(OnClicked)
-			.ButtonColorAndOpacity(Accent)
+			.ButtonColorAndOpacity(MenuAccent)
 			[
-				Label(Text, 16, true)
+				MenuLabel(Text, 16, true)
 			]
 		];
 }
@@ -165,12 +165,12 @@ TSharedRef<SWidget> UTSSMenuWidget::ViewCard(ETSSViewMode Mode, const FString& T
 			{
 				const UTSSSettingsSubsystem* S = GetSettings();
 				const ETSSViewMode Current = bPendingChoice ? PendingMode : (S ? S->GetViewMode() : Mode);
-				return FSlateColor(Current == Mode ? Accent : Idle);
+				return FSlateColor(Current == Mode ? MenuAccent : MenuIdle);
 			}))
 			[
 				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Label(Title, 20, true) ]
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[ Label(Body, 14, false, Muted) ]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ MenuLabel(Title, 20, true) ]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 10, 0, 0)[ MenuLabel(Body, 14, false, MenuMuted) ]
 			]
 		];
 }
@@ -180,7 +180,7 @@ TSharedRef<SWidget> UTSSMenuWidget::FovRow(const FString& Text, ETSSViewMode Mod
 	return SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
-			SNew(SBox).WidthOverride(210.f)[ Label(Text, 15, true) ]
+			SNew(SBox).WidthOverride(210.f)[ MenuLabel(Text, 15, true) ]
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
@@ -243,7 +243,7 @@ TSharedRef<SWidget> UTSSMenuWidget::BuildViewSelect()
 		]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 14, 0, 18)
 		[
-			Label(TEXT("You can change this anytime\nin Settings."), 14, false, Muted)
+			MenuLabel(TEXT("You can change this anytime\nin Settings."), 14, false, MenuMuted)
 		]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ MenuButton(TEXT("CONTINUE"), FOnClicked::CreateUObject(this, &UTSSMenuWidget::OnContinue)) ];
 }
@@ -252,7 +252,7 @@ TSharedRef<SWidget> UTSSMenuWidget::BuildSettings()
 {
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[ Header(TEXT("SETTINGS")) ]
-		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 0, 0, 10)[ Label(TEXT("VIEW"), 18, true, Accent) ]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 0, 0, 10)[ MenuLabel(TEXT("VIEW"), 18, true, MenuAccent) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)
 		[
 			SNew(SHorizontalBox)

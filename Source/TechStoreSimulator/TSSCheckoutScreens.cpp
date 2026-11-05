@@ -9,13 +9,13 @@
 
 namespace
 {
-	const FLinearColor Bg(0.025f, 0.04f, 0.07f, 1.f);
-	const FLinearColor Accent(0.12f, 0.5f, 0.95f, 1.f);
-	const FLinearColor Muted(0.62f, 0.7f, 0.8f, 1.f);
-	const FLinearColor Good(0.35f, 0.95f, 0.6f, 1.f);
-	constexpr int32 Rows = 7;
+	const FLinearColor ScrBg(0.025f, 0.04f, 0.07f, 1.f);
+	const FLinearColor ScrAccent(0.12f, 0.5f, 0.95f, 1.f);
+	const FLinearColor ScrMuted(0.62f, 0.7f, 0.8f, 1.f);
+	const FLinearColor ScrGood(0.35f, 0.95f, 0.6f, 1.f);
+	constexpr int32 ScrRows = 7;
 
-	FSlateFontInfo Font(const TCHAR* Style, int32 Size) { return FCoreStyle::GetDefaultFontStyle(Style, Size); }
+	FSlateFontInfo ScrFont(const TCHAR* Style, int32 Size) { return FCoreStyle::GetDefaultFontStyle(Style, Size); }
 }
 
 // ---- monitor --------------------------------------------------------------------------------------
@@ -73,18 +73,18 @@ FText UTSSMonitorWidget::FooterText() const
 TSharedRef<SWidget> UTSSMonitorWidget::RebuildWidget()
 {
 	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
-	for (int32 i = 0; i < Rows; ++i)
+	for (int32 i = 0; i < ScrRows; ++i)
 	{
 		List->AddSlot().AutoHeight().Padding(0.f, 3.f)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f)
 			[
-				SNew(STextBlock).Text_UObject(this, &UTSSMonitorWidget::RowName, i).Font(Font(TEXT("Regular"), 22))
+				SNew(STextBlock).Text_UObject(this, &UTSSMonitorWidget::RowName, i).Font(ScrFont(TEXT("Regular"), 22))
 			]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
-				SNew(STextBlock).Text_UObject(this, &UTSSMonitorWidget::RowAmount, i).Font(Font(TEXT("Bold"), 22))
+				SNew(STextBlock).Text_UObject(this, &UTSSMonitorWidget::RowAmount, i).Font(ScrFont(TEXT("Bold"), 22))
 			]
 		];
 	}
@@ -94,17 +94,17 @@ TSharedRef<SWidget> UTSSMonitorWidget::RebuildWidget()
 		return SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f)
 			[
-				SNew(STextBlock).Text(FText::FromString(Caption)).Font(Font(TEXT("Regular"), Size)).ColorAndOpacity(Muted)
+				SNew(STextBlock).Text(FText::FromString(Caption)).Font(ScrFont(TEXT("Regular"), Size)).ColorAndOpacity(ScrMuted)
 			]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
-				SNew(STextBlock).Text_UObject(this, Value).Font(Font(TEXT("Bold"), Size)).ColorAndOpacity(Color)
+				SNew(STextBlock).Text_UObject(this, Value).Font(ScrFont(TEXT("Bold"), Size)).ColorAndOpacity(Color)
 			];
 	};
 
 	return SNew(SBorder)
 		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-		.BorderBackgroundColor(Bg)
+		.BorderBackgroundColor(ScrBg)
 		.Padding(0.f)
 		[
 			SNew(SVerticalBox)
@@ -113,17 +113,17 @@ TSharedRef<SWidget> UTSSMonitorWidget::RebuildWidget()
 			[
 				SNew(SBorder)
 				.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-				.BorderBackgroundColor(Accent)
+				.BorderBackgroundColor(ScrAccent)
 				.Padding(FMargin(18.f, 8.f))
 				[
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().FillWidth(1.f)
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("TECH STORE  POS"))).Font(Font(TEXT("Bold"), 24))
+						SNew(STextBlock).Text(FText::FromString(TEXT("TECH STORE  POS"))).Font(ScrFont(TEXT("Bold"), 24))
 					]
 					+ SHorizontalBox::Slot().AutoWidth()
 					[
-						SNew(STextBlock).Text_UObject(this, &UTSSMonitorWidget::StatusText).Font(Font(TEXT("Bold"), 20))
+						SNew(STextBlock).Text_UObject(this, &UTSSMonitorWidget::StatusText).Font(ScrFont(TEXT("Bold"), 20))
 					]
 				]
 			]
@@ -136,9 +136,9 @@ TSharedRef<SWidget> UTSSMonitorWidget::RebuildWidget()
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(22.f, 0.f))
 			[
 				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[ Line(TEXT("Subtotal"), &UTSSMonitorWidget::SubtotalText, 20, Muted) ]
-				+ SVerticalBox::Slot().AutoHeight()[ Line(TEXT("Tax  8%"), &UTSSMonitorWidget::TaxText, 20, Muted) ]
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f)[ Line(TEXT("TOTAL"), &UTSSMonitorWidget::TotalText, 34, Good) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Line(TEXT("Subtotal"), &UTSSMonitorWidget::SubtotalText, 20, ScrMuted) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Line(TEXT("Tax  8%"), &UTSSMonitorWidget::TaxText, 20, ScrMuted) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f)[ Line(TEXT("TOTAL"), &UTSSMonitorWidget::TotalText, 34, ScrGood) ]
 			]
 			// Status / notice
 			+ SVerticalBox::Slot().AutoHeight()
@@ -148,7 +148,7 @@ TSharedRef<SWidget> UTSSMonitorWidget::RebuildWidget()
 				.BorderBackgroundColor(FLinearColor(0.06f, 0.09f, 0.14f, 1.f))
 				.Padding(FMargin(22.f, 8.f))
 				[
-					SNew(STextBlock).Text_UObject(this, &UTSSMonitorWidget::FooterText).Font(Font(TEXT("Regular"), 19)).ColorAndOpacity(FLinearColor(0.85f, 0.92f, 1.f, 1.f))
+					SNew(STextBlock).Text_UObject(this, &UTSSMonitorWidget::FooterText).Font(ScrFont(TEXT("Regular"), 19)).ColorAndOpacity(FLinearColor(0.85f, 0.92f, 1.f, 1.f))
 				]
 			]
 		];
@@ -176,17 +176,17 @@ TSharedRef<SWidget> UTSSTerminalWidget::RebuildWidget()
 {
 	return SNew(SBorder)
 		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-		.BorderBackgroundColor(Bg)
+		.BorderBackgroundColor(ScrBg)
 		.Padding(FMargin(14.f))
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 			[
-				SNew(STextBlock).Text(FText::FromString(TEXT("TECH PAY"))).Font(Font(TEXT("Bold"), 20)).ColorAndOpacity(Accent)
+				SNew(STextBlock).Text(FText::FromString(TEXT("TECH PAY"))).Font(ScrFont(TEXT("Bold"), 20)).ColorAndOpacity(ScrAccent)
 			]
 			+ SVerticalBox::Slot().FillHeight(1.f).HAlign(HAlign_Center).VAlign(VAlign_Center)
 			[
-				SNew(STextBlock).Text_UObject(this, &UTSSTerminalWidget::AmountText).Font(Font(TEXT("Bold"), 52))
+				SNew(STextBlock).Text_UObject(this, &UTSSTerminalWidget::AmountText).Font(ScrFont(TEXT("Bold"), 52))
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
@@ -196,7 +196,7 @@ TSharedRef<SWidget> UTSSTerminalWidget::RebuildWidget()
 				.Padding(FMargin(8.f, 14.f))
 				.HAlign(HAlign_Center)
 				[
-					SNew(STextBlock).Text_UObject(this, &UTSSTerminalWidget::StatusText).Font(Font(TEXT("Bold"), 22))
+					SNew(STextBlock).Text_UObject(this, &UTSSTerminalWidget::StatusText).Font(ScrFont(TEXT("Bold"), 22))
 				]
 			]
 		];

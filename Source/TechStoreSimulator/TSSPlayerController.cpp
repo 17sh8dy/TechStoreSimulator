@@ -12,6 +12,11 @@
 #include "TSSSettings.h"
 #include "TSSCustomerSubsystem.h"
 #include "TSSRegister.h"
+#include "TSSBusinessSave.h"
+#include "TSSDeliveryActors.h"
+#include "TSSBusinessSubsystem.h"
+#include "TSSStoreDeskComputer.h"
+#include "TSSStoreDeskWidget.h"
 #include "TSSRegisterDevice.h"
 #include "TSSCheckoutTypes.h"
 #include "TSSProductItem.h"
@@ -86,6 +91,41 @@ void ATSSPlayerController::EnterGameInput()
 	bShowMouseCursor = false;
 }
 
+void ATSSPlayerController::OpenStoreDesk()
+{
+	if (!bGameActive || bDeskOpen || !Hud) return;
+	if (!Desk)
+	{
+		Desk = CreateWidget<UTSSStoreDeskWidget>(this, UTSSStoreDeskWidget::StaticClass());
+		Desk->SetOnClose([this]() { CloseStoreDesk(); });
+	}
+	bDeskOpen = true;
+	bGameActive = false; // the character stops reading input; the shop itself keeps running
+	Hud->SetVisibility(ESlateVisibility::Collapsed);
+	Desk->AddToViewport(20);
+	FInputModeGameAndUI Mode;
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	Mode.SetHideCursorDuringCapture(false);
+	SetInputMode(Mode);
+	bShowMouseCursor = true;
+}
+
+void ATSSPlayerController::CloseStoreDesk()
+{
+	if (!bDeskOpen) return;
+	bDeskOpen = false;
+	if (Desk) Desk->RemoveFromParent();
+	if (UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz->SaveNow();
+	EnterGameInput();
+}
+
+void ATSSPlayerController::TSSDeskPage(int32 Page)
+{
+	TSSStart();
+	if (!bDeskOpen) OpenStoreDesk();
+	if (Desk) Desk->SetPage(Page);
+}
+
 void ATSSPlayerController::StartNewGame() { EnterGameInput(); }
 void ATSSPlayerController::ResumeGame() { EnterGameInput(); }
 
@@ -98,6 +138,12 @@ void ATSSPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	if (!Menu) return;
+
+	if (bDeskOpen)
+	{
+		if (WasInputKeyJustPressed(EKeys::Escape)) CloseStoreDesk();
+		return;
+	}
 
 	if (WasInputKeyJustPressed(EKeys::Escape) || WasInputKeyJustPressed(EKeys::Tab))
 	{
@@ -416,7 +462,223 @@ void ATSSPlayerController::TSSCustomerTest()
 		{
 			UE_LOG(LogTemp, Display, TEXT("TSSTEST CUSTOMERS DONE fails=%d"), St->Fails);
 			GetWorldTimerManager().ClearTimer(*Handle);
-			if (FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest"))) ConsoleCommand(TEXT("QUIT_EDITOR"));
+			if (FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest"))) ConsoleCommand(TEXT("TSSDeskTest"));
+		}
+	}, 0.2f, true);
+}
+
+void ATSSPlayerController::TSSDeskTest()
+{
+	// StoreDesk end to end, with the real objects: open it from the computer, check the dashboard against the
+	// real books, buy upgrades, order stock, receive the truck, unpack onto the new shelf, check the save.
+	struct FState
+	{
+		int32 Step = 0;
+		float Hold = 0.f;
+		float Elapsed = 0.f;
+		int32 Fails = 0;
+		int32 OrderId = 0;
+		int32 XP0 = 0;
+	};
+	TSharedRef<FState> St = MakeShared<FState>();
+
+	UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
+	UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>();
+	ATSSCharacter* Me = Cast<ATSSCharacter>(GetPawn());
+	ATSSStoreDeskComputer* Comp = nullptr;
+	for (TActorIterator<ATSSStoreDeskComputer> It(GetWorld()); It; ++It) { Comp = *It; break; }
+
+	auto Check = [St](const TCHAR* Name, bool bOk)
+	{
+		UE_LOG(LogTemp, Display, TEXT("TSSTEST %s %s"), bOk ? TEXT("PASS") : TEXT("FAIL"), Name);
+		if (!bOk) ++St->Fails;
+	};
+	auto Finish = [this, St]()
+	{
+		UE_LOG(LogTemp, Display, TEXT("TSSTEST STOREDESK DONE fails=%d"), St->Fails);
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest"))) ConsoleCommand(TEXT("QUIT_EDITOR"));
+	};
+	Check(TEXT("store, business and player exist"), Store && Biz && Me);
+	Check(TEXT("the StoreDesk computer is in the world"), Comp != nullptr);
+	if (!(Store && Biz && Me && Comp)) { Finish(); return; }
+
+	TSSStart();
+	auto CountShelves = [this]() { int32 N = 0; for (TActorIterator<ATSSShelf> It(GetWorld()); It; ++It) ++N; return N; };
+
+	// ---- the physical computer opens the interface ----------------------------------------------------
+	Check(TEXT("computer prompt invites you to use StoreDesk"), Comp->GetPrompt(Me, FHitResult()).Contains(TEXT("StoreDesk")));
+	Comp->Interact(Me, FHitResult());
+	Check(TEXT("E on the computer opens StoreDesk"), IsDeskOpen() && GetDesk() != nullptr);
+
+	// ---- every dashboard number comes from the real books ------------------------------------------
+	{
+		const FTSSDashboard D = Biz->GetDashboard();
+		int32 SumSub = 0, SumItems = 0;
+		for (const FTSSTransaction& T : Store->GetTransactions()) { SumSub += T.Subtotal; SumItems += T.Items; }
+		Check(TEXT("dashboard money = the store's money"), D.Money == Store->GetMoney());
+		Check(TEXT("lifetime revenue = sum of the logged sales (and not zero)"), D.LifetimeRevenue == SumSub && SumSub > 0);
+		Check(TEXT("products sold = items in the logged sales"), D.ProductsSold == SumItems && SumItems > 0);
+		Check(TEXT("customers served = logged sales"), D.CustomersServed == Store->GetTransactions().Num());
+		Check(TEXT("today's revenue is real and within lifetime revenue"), D.TodayRevenue > 0 && D.TodayRevenue <= D.LifetimeRevenue);
+		Check(TEXT("sales earned experience"), D.XP > 0 && D.Level >= 1);
+		Check(TEXT("the first-sale achievement unlocked"), Biz->HasAchievement(TEXT("first_sale")));
+		Check(TEXT("prestige is locked at this level"), !Biz->IsPrestigeUnlocked());
+	}
+	CloseStoreDesk();
+	Check(TEXT("Esc / Log Off closes StoreDesk and returns control"), !IsDeskOpen() && IsGameActive());
+
+	// ---- upgrades -------------------------------------------------------------------------------------
+	Store->Earn(5000);
+	FString Why;
+	const float Eta0 = Biz->EtaFor(5);
+	int32 M0 = Store->GetMoney();
+	Check(TEXT("buying Express Supplier charges its price"), Biz->BuyUpgrade(TEXT("supplier_fast"), Why) && Store->GetMoney() == M0 - 400 && Biz->HasUpgrade(TEXT("supplier_fast")));
+	Check(TEXT("Express Supplier halves the delivery time"), FMath::IsNearlyEqual(Biz->EtaFor(5), Eta0 * 0.5f, 0.01f));
+	Check(TEXT("upgrade spending is recorded for the finance page"), Store->GetUpgradeSpend() >= 400);
+	Check(TEXT("an owned upgrade cannot be bought twice"), !Biz->BuyUpgrade(TEXT("supplier_fast"), Why));
+	Check(TEXT("a planned upgrade cannot be bought yet"), !Biz->BuyUpgrade(TEXT("storage"), Why));
+	const int32 Shelves0 = CountShelves();
+	M0 = Store->GetMoney();
+	Check(TEXT("buying the shelf upgrade charges its price"), Biz->BuyUpgrade(TEXT("shelf_1"), Why) && Store->GetMoney() == M0 - 350);
+	Check(TEXT("the shelf upgrade adds a real shelf to the shop"), CountShelves() == Shelves0 + 1);
+	ATSSShelf* NewShelf = nullptr;
+	for (TActorIterator<ATSSShelf> It(GetWorld()); It; ++It) if (It->ActorHasTag(TEXT("shelf_1"))) NewShelf = *It;
+	Check(TEXT("the new shelf is the upgrade's shelf"), NewShelf != nullptr);
+	Check(TEXT("a level-gated upgrade follows the level rule"), Biz->BuyUpgrade(TEXT("shelf_2"), Why) == (Biz->GetLevel() >= 2));
+	if (!NewShelf) { Finish(); return; }
+
+	// ---- ordering ---------------------------------------------------------------------------------------
+	Biz->EtaScale = 0.05f;      // hurry the wholesaler and the courier for the test
+	Biz->DeliverySpeed = 6.f;
+	Check(TEXT("an empty cart cannot be ordered"), !Biz->PlaceOrder(TArray<FTSSOrderLine>(), Why));
+	M0 = Store->GetMoney();
+	Check(TEXT("an order you cannot afford is refused and charges nothing"), !Biz->PlaceOrder({ { ETSSProduct::Laptop, 500 } }, Why) && Store->GetMoney() == M0);
+	const TArray<FTSSOrderLine> Lines = { { ETSSProduct::Phone, 3 }, { ETSSProduct::Keyboard, 2 } };
+	const int32 Cost = Biz->OrderCost(Lines);
+	Check(TEXT("order cost = wholesale price x quantity"), Cost == 3 * TSSProductDef(ETSSProduct::Phone).WholesaleCost + 2 * TSSProductDef(ETSSProduct::Keyboard).WholesaleCost);
+	M0 = Store->GetMoney();
+	const int32 Spend0 = Store->GetOrderSpend();
+	int32 Id = 0;
+	Check(TEXT("placing an order deducts exactly its cost"), Biz->PlaceOrder(Lines, Why, &Id) && Store->GetMoney() == M0 - Cost && Store->GetOrderSpend() == Spend0 + Cost);
+	const FTSSOrder* O = Biz->FindOrder(Id);
+	Check(TEXT("the order is recorded in transit with an arrival time"), O && O->Status == ETSSOrderStatus::InTransit && O->ArriveAt > O->PlacedAt && O->UnitsLeft == 5);
+	Check(TEXT("the order counts as active"), Biz->ActiveOrderCount() >= 1);
+	St->OrderId = Id;
+	St->XP0 = Biz->GetXP();
+
+	FTimerHandle* Handle = new FTimerHandle();
+	GetWorldTimerManager().SetTimer(*Handle, [this, St, Store, Biz, Me, Comp, NewShelf, Check, Finish, Handle]()
+	{
+		const float Dt = 0.2f;
+		St->Elapsed += Dt;
+		if (St->Hold > 0.f) { St->Hold -= Dt; return; }
+		auto Done = [&]()
+		{
+			GetWorldTimerManager().ClearTimer(*Handle);
+			Finish();
+		};
+		auto Snap = [this]() { FTimerHandle T; GetWorldTimerManager().SetTimer(T, [this]() { ConsoleCommand(TEXT("Shot ShowUI")); }, 0.7f, false); };
+
+		switch (St->Step)
+		{
+		case 0: // the truck arrives and the parcels are on the dock
+		{
+			const FTSSOrder* Ord = Biz->FindOrder(St->OrderId);
+			if (!Ord || Ord->Status != ETSSOrderStatus::Arrived)
+			{
+				if (St->Elapsed > 60.f) { Check(TEXT("the truck delivered the order to the dock"), false); Done(); }
+				return;
+			}
+			TArray<ATSSParcel*> Parcels;
+			for (TActorIterator<ATSSParcel> It(GetWorld()); It; ++It) Parcels.Add(*It);
+			Check(TEXT("one parcel per order line is waiting on the dock"), Parcels.Num() == 2);
+
+			// Unpack every unit into the hands and stock it on the new shelf.
+			int32 SlotNext = 0;
+			for (ATSSParcel* P : Parcels)
+			{
+				const ETSSProduct Product = P->GetProduct();
+				const int32 Qty = P->GetQty();
+				const int32 Slot = SlotNext++;
+				TWeakObjectPtr<ATSSParcel> Weak(P);
+				FHitResult Hit;
+				static const float TierZ[ATSSShelf::Tiers] = { 12.f, 72.f, 132.f };
+				Hit.ImpactPoint = NewShelf->GetActorTransform().TransformPosition(FVector(24.f, -75.f + 50.f * (Slot % ATSSShelf::Columns), TierZ[Slot / ATSSShelf::Columns] + 25.f));
+				for (int32 n = 0; n < Qty && Weak.IsValid(); ++n)
+				{
+					Weak->Interact(Me, FHitResult());
+					Check(TEXT("unpacking puts the product in the player's hands"), Me->GetHeld() == Product);
+					NewShelf->Interact(Me, Hit);
+				}
+			}
+			int32 Phones = 0, Keyboards = 0;
+			for (int32 s = 0; s < ATSSShelf::Tiers * ATSSShelf::Columns; ++s)
+			{
+				if (NewShelf->GetSlotProduct(s) == ETSSProduct::Phone) Phones += NewShelf->GetSlotQty(s);
+				if (NewShelf->GetSlotProduct(s) == ETSSProduct::Keyboard) Keyboards += NewShelf->GetSlotQty(s);
+			}
+			Check(TEXT("the unpacked products are on the shelf in the ordered quantities"), Phones == 3 && Keyboards == 2);
+			Ord = Biz->FindOrder(St->OrderId);
+			Check(TEXT("the order is received once everything is unpacked"), Ord && Ord->Status == ETSSOrderStatus::Received && Ord->UnitsLeft == 0);
+			Check(TEXT("receiving a delivery earned experience"), Biz->GetXP() > St->XP0);
+			Check(TEXT("the delivery achievement unlocked"), Biz->HasAchievement(TEXT("first_delivery")));
+			St->Step = 1; St->Elapsed = 0.f;
+			break;
+		}
+		case 1: // the truck leaves, then the save is checked
+		{
+			bool bTruck = false;
+			for (TActorIterator<ATSSDeliveryTruck> It(GetWorld()); It; ++It) bTruck = true;
+			if (bTruck) { if (St->Elapsed > 30.f) { Check(TEXT("the truck drove away"), false); Done(); } return; }
+			Check(TEXT("the truck drove away and the dock is clear"), true);
+
+			Biz->SaveNow();
+			UTSSBusinessSave* Save = Cast<UTSSBusinessSave>(UGameplayStatics::LoadGameFromSlot(Biz->GetSlotName(), 0));
+			Check(TEXT("the business was written to a save file"), Save != nullptr);
+			if (Save)
+			{
+				Check(TEXT("the save holds the money, revenue and customers"), Save->Money == Store->GetMoney() && Save->LifetimeRevenue == Store->GetLifetimeRevenue() && Save->Served == Store->GetServed() && Save->ProductsSold == Store->GetProductsSold());
+				Check(TEXT("the save holds XP, upgrades, orders and achievements"), Save->XP == Biz->GetXP() && Save->Upgrades.Contains(FName(TEXT("shelf_1"))) && Save->Orders.Num() == Biz->GetOrders().Num() && Save->Achievements.Contains(FName(TEXT("first_delivery"))));
+				Check(TEXT("the save holds the sales log"), Save->Transactions.Num() == Store->GetTransactions().Num());
+			}
+			// Screenshots of the interface and the computer.
+			TSSDeskPage(0);
+			Snap();
+			St->Hold = 1.6f; St->Step = 2; St->Elapsed = 0.f;
+			break;
+		}
+		case 2:
+			GetDesk()->GetContext().Cart.Add(ETSSProduct::Laptop, 2);
+			GetDesk()->GetContext().Cart.Add(ETSSProduct::Headphones, 1);
+			GetDesk()->GetContext().Selected = ETSSProduct::Laptop;
+			TSSDeskPage(2);
+			Snap();
+			St->Hold = 1.6f; St->Step = 3;
+			break;
+		case 3:
+			TSSDeskPage(3);
+			Snap();
+			St->Hold = 1.6f; St->Step = 4;
+			break;
+		case 4:
+			TSSDeskPage(6);
+			Snap();
+			St->Hold = 1.6f; St->Step = 5;
+			break;
+		case 5:
+		{
+			CloseStoreDesk();
+			const FVector Wp = Comp->GetActorTransform().TransformPosition(FVector(135.f, -22.f, 0.f));
+			const FVector Wt = Comp->GetActorTransform().TransformPosition(FVector(0.f, -22.f, 85.f));
+			const FRotator R = (Wt - (Wp + FVector(0.f, 0.f, 154.f))).Rotation();
+			ConsoleCommand(FString::Printf(TEXT("TSSLook %f %f 90 %f %f"), Wp.X, Wp.Y, R.Yaw, R.Pitch));
+			Snap();
+			St->Hold = 1.6f; St->Step = 6;
+			break;
+		}
+		default:
+			Done();
+			break;
 		}
 	}, 0.2f, true);
 }

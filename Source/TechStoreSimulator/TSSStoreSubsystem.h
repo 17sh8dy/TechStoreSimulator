@@ -4,9 +4,13 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "TSSProducts.h"
 #include "TSSCheckoutTypes.h"
+#include "TSSBusinessTypes.h"
 #include "TSSStoreSubsystem.generated.h"
 
 DECLARE_MULTICAST_DELEGATE(FTSSStoreChanged);
+DECLARE_MULTICAST_DELEGATE_OneParam(FTSSSaleRecorded, const FTSSTransaction&);
+
+class UTSSBusinessSave;
 
 /** The shop's books: cash and the shelf price of each product. One per world. */
 UCLASS()
@@ -39,7 +43,26 @@ public:
 	bool IsSimPaused() const { return bSimPaused; }
 	void SetSimPaused(bool bPaused) { bSimPaused = bPaused; }
 
+	// ---- business statistics (every StoreDesk number comes from here) -----------------------------
+	/** Revenue is the pre-tax amount of finished sales. */
+	int32 GetLifetimeRevenue() const { return LifetimeRevenue; }
+	int32 GetTodayRevenue() const { return TodayRevenue; }
+	int32 GetProductsSold() const { return ProductsSold; }
+	int32 GetDay() const { return Day; }
+	int32 GetOrderSpend() const { return OrderSpend; }
+	int32 GetUpgradeSpend() const { return UpgradeSpend; }
+	/** Called by the business clock when a new shop day starts: today's revenue resets. */
+	void StartDay(int32 NewDay);
+	/** Spending that StoreDesk does goes through TrySpend, then is noted here for the finance page. */
+	void NoteOrderSpend(int32 Amount) { OrderSpend += Amount; OnChanged.Broadcast(); }
+	void NoteUpgradeSpend(int32 Amount) { UpgradeSpend += Amount; OnChanged.Broadcast(); }
+
+	void ExportTo(UTSSBusinessSave* Save) const;
+	void ImportFrom(const UTSSBusinessSave* Save);
+
 	FTSSStoreChanged OnChanged;
+	/** Fired once per finished sale (the business uses it for experience). */
+	FTSSSaleRecorded OnSale;
 
 private:
 	int32 Money = 1000;
@@ -49,6 +72,12 @@ private:
 	int32 TaxCollected = 0;
 	TArray<FTSSTransaction> Transactions;
 	int32 Lost = 0;
+	int32 LifetimeRevenue = 0;
+	int32 TodayRevenue = 0;
+	int32 ProductsSold = 0;
+	int32 OrderSpend = 0;
+	int32 UpgradeSpend = 0;
+	int32 Day = 1;
 	bool bSimPaused = true;
 	int32 Prices[static_cast<int32>(ETSSProduct::Count)] = {};
 };

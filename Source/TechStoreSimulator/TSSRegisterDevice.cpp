@@ -9,9 +9,9 @@
 
 namespace
 {
-	constexpr float Top = ATSSRegister::TopZ;
-	const FLinearColor Dark(0.06f, 0.06f, 0.08f);
-	const FLinearColor Steel(0.55f, 0.57f, 0.6f);
+	constexpr float DevTop = ATSSRegister::TopZ;
+	const FLinearColor DevDark(0.06f, 0.06f, 0.08f);
+	const FLinearColor DevSteel(0.55f, 0.57f, 0.6f);
 
 	void ConfigureScreen(UWidgetComponent* W, TSubclassOf<UUserWidget> Class, FIntPoint Pixels, float WidthCm)
 	{
@@ -76,14 +76,14 @@ ATSSRegister* ATSSRegisterDevice::GetRegister() const
 
 ATSSRegisterMonitor::ATSSRegisterMonitor()
 {
-	Box(TEXT("Foot"), FVector(18.f, -85.f, Top + 1.f), FVector(16.f, 24.f, 2.f), Dark);
-	Box(TEXT("Neck"), FVector(18.f, -85.f, Top + 8.f), FVector(4.f, 6.f, 12.f), Dark);
-	Box(TEXT("Bezel"), FVector(17.f, -85.f, Top + 27.f), FVector(3.f, 44.f, 31.f), Dark, FRotator(10.f, 0.f, 0.f));
+	Box(TEXT("Foot"), FVector(18.f, -85.f, DevTop + 1.f), FVector(16.f, 24.f, 2.f), DevDark);
+	Box(TEXT("Neck"), FVector(18.f, -85.f, DevTop + 8.f), FVector(4.f, 6.f, 12.f), DevDark);
+	Box(TEXT("Bezel"), FVector(17.f, -85.f, DevTop + 27.f), FVector(3.f, 44.f, 31.f), DevDark, FRotator(10.f, 0.f, 0.f));
 
 	Screen = CreateDefaultSubobject<UWidgetComponent>(TEXT("Screen"));
 	Screen->SetupAttachment(GetRootComponent());
 	// The screen faces the owner (+X) and tilts up slightly, matching the bezel.
-	Screen->SetRelativeLocation(FVector(18.6f, -85.f, Top + 27.f + 0.3f));
+	Screen->SetRelativeLocation(FVector(18.6f, -85.f, DevTop + 27.f + 0.3f));
 	Screen->SetRelativeRotation(FRotator(10.f, 0.f, 0.f));
 	ConfigureScreen(Screen, UTSSMonitorWidget::StaticClass(), FIntPoint(560, 380), 40.f);
 }
@@ -99,9 +99,9 @@ void ATSSRegisterMonitor::BeginPlay()
 
 ATSSRegisterKeyboard::ATSSRegisterKeyboard()
 {
-	Box(TEXT("Base"), FVector(31.f, -85.f, Top + 0.8f), FVector(13.f, 34.f, 1.6f), Dark);
-	Box(TEXT("Keys"), FVector(31.f, -85.f, Top + 1.9f), FVector(10.5f, 30.f, 0.8f), FLinearColor(0.4f, 0.42f, 0.46f));
-	Box(TEXT("Enter"), FVector(31.f, -73.f, Top + 2.3f), FVector(5.f, 7.f, 0.8f), FLinearColor(0.1f, 0.5f, 0.9f));
+	Box(TEXT("Base"), FVector(31.f, -85.f, DevTop + 0.8f), FVector(13.f, 34.f, 1.6f), DevDark);
+	Box(TEXT("Keys"), FVector(31.f, -85.f, DevTop + 1.9f), FVector(10.5f, 30.f, 0.8f), FLinearColor(0.4f, 0.42f, 0.46f));
+	Box(TEXT("Enter"), FVector(31.f, -73.f, DevTop + 2.3f), FVector(5.f, 7.f, 0.8f), FLinearColor(0.1f, 0.5f, 0.9f));
 }
 
 FString ATSSRegisterKeyboard::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
@@ -120,8 +120,8 @@ void ATSSRegisterKeyboard::Interact(ATSSCharacter* Player, const FHitResult& Hit
 ATSSScanner::ATSSScanner()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	Box(TEXT("Pad"), FVector(-8.f, -5.f, Top + 1.25f), FVector(28.f, 30.f, 2.5f), Dark);
-	Glass = Box(TEXT("Glass"), FVector(-8.f, -5.f, Top + 2.7f), FVector(22.f, 24.f, 0.5f), FLinearColor(0.7f, 0.05f, 0.05f));
+	Box(TEXT("Pad"), FVector(-8.f, -5.f, DevTop + 1.25f), FVector(28.f, 30.f, 2.5f), DevDark);
+	Glass = Box(TEXT("Glass"), FVector(-8.f, -5.f, DevTop + 2.7f), FVector(22.f, 24.f, 0.5f), FLinearColor(0.7f, 0.05f, 0.05f));
 }
 
 void ATSSScanner::Beep(bool bOk)
@@ -179,11 +179,11 @@ ATSSCashDrawer::ATSSCashDrawer()
 	Tray->SetupAttachment(GetRootComponent());
 	Tray->SetRelativeLocation(FVector(DrawerClosedX, DrawerY, 0.f));
 
-	Box(TEXT("TrayFloor"), FVector(0.f, 0.f, 86.f), FVector(50.f, 60.f, 3.f), Steel, FRotator::ZeroRotator, Tray);
+	Box(TEXT("TrayFloor"), FVector(0.f, 0.f, 86.f), FVector(50.f, 60.f, 3.f), DevSteel, FRotator::ZeroRotator, Tray);
 	Box(TEXT("TrayFront"), FVector(25.f, 0.f, 89.f), FVector(2.f, 60.f, 9.f), FLinearColor(0.15f, 0.15f, 0.18f), FRotator::ZeroRotator, Tray);
-	Box(TEXT("TrayBack"), FVector(-25.f, 0.f, 89.f), FVector(2.f, 60.f, 9.f), Steel, FRotator::ZeroRotator, Tray);
-	Box(TEXT("TraySideL"), FVector(0.f, 30.f, 89.f), FVector(50.f, 2.f, 9.f), Steel, FRotator::ZeroRotator, Tray);
-	Box(TEXT("TraySideR"), FVector(0.f, -30.f, 89.f), FVector(50.f, 2.f, 9.f), Steel, FRotator::ZeroRotator, Tray);
+	Box(TEXT("TrayBack"), FVector(-25.f, 0.f, 89.f), FVector(2.f, 60.f, 9.f), DevSteel, FRotator::ZeroRotator, Tray);
+	Box(TEXT("TraySideL"), FVector(0.f, 30.f, 89.f), FVector(50.f, 2.f, 9.f), DevSteel, FRotator::ZeroRotator, Tray);
+	Box(TEXT("TraySideR"), FVector(0.f, -30.f, 89.f), FVector(50.f, 2.f, 9.f), DevSteel, FRotator::ZeroRotator, Tray);
 	for (int32 i = 0; i < TSSMoney::NumDenoms; ++i)
 	{
 		const FString Idx = FString::FromInt(i);
@@ -259,17 +259,17 @@ void ATSSCashDrawer::ClickDenom(int32 Denom)
 
 namespace
 {
-	const FVector TermPos(-2.f, 55.f, Top);
-	const FVector CardFrom(-52.f, 55.f, Top + 26.f);
-	const FVector CardTo(3.f, 55.f, Top + 27.f);
+	const FVector TermPos(-2.f, 55.f, DevTop);
+	const FVector CardFrom(-52.f, 55.f, DevTop + 26.f);
+	const FVector CardTo(3.f, 55.f, DevTop + 27.f);
 }
 
 ATSSCardTerminal::ATSSCardTerminal()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	Box(TEXT("Foot"), TermPos + FVector(0.f, 0.f, 1.f), FVector(14.f, 18.f, 2.f), Dark);
-	Box(TEXT("Post"), TermPos + FVector(-1.f, 0.f, 6.f), FVector(4.f, 5.f, 8.f), Dark);
-	Box(TEXT("Body"), TermPos + FVector(0.f, 0.f, 17.f), FVector(12.f, 11.f, 18.f), Dark, FRotator(25.f, 0.f, 0.f));
+	Box(TEXT("Foot"), TermPos + FVector(0.f, 0.f, 1.f), FVector(14.f, 18.f, 2.f), DevDark);
+	Box(TEXT("Post"), TermPos + FVector(-1.f, 0.f, 6.f), FVector(4.f, 5.f, 8.f), DevDark);
+	Box(TEXT("Body"), TermPos + FVector(0.f, 0.f, 17.f), FVector(12.f, 11.f, 18.f), DevDark, FRotator(25.f, 0.f, 0.f));
 	Card = Box(TEXT("Card"), CardFrom, FVector(8.5f, 5.4f, 0.3f), FLinearColor(0.1f, 0.3f, 0.8f));
 	Card->SetVisibility(false);
 
@@ -312,14 +312,14 @@ void ATSSCardTerminal::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 
 namespace
 {
-	const FVector PrinterPos(28.f, -122.f, Top);
+	const FVector PrinterPos(28.f, -122.f, DevTop);
 	constexpr float PaperLength = 26.f;
 }
 
 ATSSReceiptPrinter::ATSSReceiptPrinter()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	Box(TEXT("Body"), PrinterPos + FVector(0.f, 0.f, 6.f), FVector(14.f, 16.f, 12.f), Dark);
+	Box(TEXT("Body"), PrinterPos + FVector(0.f, 0.f, 6.f), FVector(14.f, 16.f, 12.f), DevDark);
 	Box(TEXT("Slot"), PrinterPos + FVector(0.f, 0.f, 12.2f), FVector(2.f, 9.f, 0.6f), FLinearColor(0.f, 0.f, 0.f));
 	Box(TEXT("Led"), PrinterPos + FVector(7.2f, 5.f, 8.f), FVector(0.6f, 1.5f, 1.5f), FLinearColor(0.1f, 0.9f, 0.3f));
 	Paper = Box(TEXT("Paper"), PrinterPos + FVector(0.f, 0.f, 12.f), FVector(0.3f, 8.f, 0.1f), FLinearColor(0.97f, 0.97f, 0.94f));

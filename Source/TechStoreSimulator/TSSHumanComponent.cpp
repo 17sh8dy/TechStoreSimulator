@@ -121,3 +121,11 @@ void UTSSHumanComponent::SetHiddenFromOwner(bool bHidden)
 		if (P) P->SetOwnerNoSee(bHidden);
 	}
 }
+
+void UTSSHumanComponent::SetShown(bool bShown)
+{
+	for (UPrimitiveComponent* P : Pieces)
+	{
+		if (P && P != Leader) P->SetVisibility(bShown);
+	}
+}
