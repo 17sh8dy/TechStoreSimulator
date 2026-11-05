@@ -641,13 +641,19 @@ void ATSSPlayerController::TSSDeskTest()
 				Check(TEXT("the save holds XP, upgrades, orders and achievements"), Save->XP == Biz->GetXP() && Save->Upgrades.Contains(FName(TEXT("shelf_1"))) && Save->Orders.Num() == Biz->GetOrders().Num() && Save->Achievements.Contains(FName(TEXT("first_delivery"))));
 				Check(TEXT("the save holds the sales log"), Save->Transactions.Num() == Store->GetTransactions().Num());
 			}
+			Check(TEXT("Employees and Contracts are locked sections with a level requirement"),
+				TSSDeskPages().Num() == 8 && TSSDeskPages()[4]->RequiredLevel() > 0 && TSSDeskPages()[5]->RequiredLevel() > 0
+				&& TSSDeskPages()[4]->Badge(1) == TEXT("LOCKED") && TSSDeskPages()[0]->RequiredLevel() == 0);
+			Check(TEXT("a section stays marked once its level is reached but it is not built"), TSSDeskPages()[4]->Badge(TSSDeskPages()[4]->RequiredLevel()) == TEXT("NOT YET"));
 			// Screenshots of the interface and the computer.
+			GetDesk()->SetDark(true);
 			TSSDeskPage(0);
 			Snap();
 			St->Hold = 1.6f; St->Step = 2; St->Elapsed = 0.f;
 			break;
 		}
 		case 2:
+			Check(TEXT("the dark-mode pill switches the theme"), TSSDeskDark() && TSSDeskTheme().PageBg.R < 0.2f);
 			GetDesk()->GetContext().Cart.Add(ETSSProduct::Laptop, 2);
 			GetDesk()->GetContext().Cart.Add(ETSSProduct::Headphones, 1);
 			GetDesk()->GetContext().Selected = ETSSProduct::Laptop;
@@ -661,11 +667,18 @@ void ATSSPlayerController::TSSDeskTest()
 			St->Hold = 1.6f; St->Step = 4;
 			break;
 		case 4:
-			TSSDeskPage(6);
+			TSSDeskPage(4); // a locked section, in dark mode
 			Snap();
 			St->Hold = 1.6f; St->Step = 5;
 			break;
 		case 5:
+			GetDesk()->SetDark(false);
+			Check(TEXT("switching back restores the light theme"), !TSSDeskDark() && TSSDeskTheme().PageBg.R > 0.8f);
+			TSSDeskPage(6);
+			Snap();
+			St->Hold = 1.6f; St->Step = 6;
+			break;
+		case 6:
 		{
 			CloseStoreDesk();
 			const FVector Wp = Comp->GetActorTransform().TransformPosition(FVector(135.f, -22.f, 0.f));
@@ -673,7 +686,7 @@ void ATSSPlayerController::TSSDeskTest()
 			const FRotator R = (Wt - (Wp + FVector(0.f, 0.f, 154.f))).Rotation();
 			ConsoleCommand(FString::Printf(TEXT("TSSLook %f %f 90 %f %f"), Wp.X, Wp.Y, R.Yaw, R.Pitch));
 			Snap();
-			St->Hold = 1.6f; St->Step = 6;
+			St->Hold = 1.6f; St->Step = 7;
 			break;
 		}
 		default:

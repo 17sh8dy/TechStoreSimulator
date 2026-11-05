@@ -1,7 +1,11 @@
 #include "TSSStoreDeskWidget.h"
 #include "TSSBusinessSubsystem.h"
 #include "TSSStoreSubsystem.h"
+#include "Brushes/SlateNoResource.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Styling/CoreStyle.h"
+#include "Styling/SlateTypes.h"
+#include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -11,10 +15,6 @@
 
 namespace
 {
-	const FLinearColor WinInk(0.03f, 0.03f, 0.06f, 1.f);
-	const FLinearColor WinChrome(0.75f, 0.75f, 0.75f, 1.f);
-	const FLinearColor WinNavy(0.f, 0.f, 0.5f, 1.f);
-	const FLinearColor WinTeal(0.f, 0.42f, 0.42f, 1.f);
 	const FLinearColor WinCrt(0.35f, 1.f, 0.45f, 1.f);
 
 	FSlateFontInfo WinFont(bool bBold, int32 Size) { return FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", Size); }
@@ -59,15 +59,46 @@ void UTSSStoreDeskWidget::SetPage(int32 Index)
 void UTSSStoreDeskWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
-	if (bDirty && PageHost.IsValid() && Ctx.Store && Ctx.Biz)
+	RefreshPage();
+}
+
+void UTSSStoreDeskWidget::RefreshPage()
+{
+	if (!bDirty || !PageHost.IsValid()) return;
+	if (UWorld* World = GetWorld())
 	{
-		bDirty = false;
-		PageHost->SetContent(TSSDeskPages()[PageIndex]->Build(Ctx));
+		Ctx.World = World;
+		if (!Ctx.Store) Ctx.Store = World->GetSubsystem<UTSSStoreSubsystem>();
+		if (!Ctx.Biz) Ctx.Biz = World->GetSubsystem<UTSSBusinessSubsystem>();
 	}
+	if (!Ctx.Store || !Ctx.Biz) return;
+	bDirty = false;
+	PageHost->SetContent(TSSDeskPages()[PageIndex]->Build(Ctx));
 }
 
 TSharedRef<SWidget> UTSSStoreDeskWidget::RebuildWidget()
 {
+	TSharedRef<SBox> Root = SAssignNew(RootHost, SBox)[ BuildWindow() ];
+	Root->RegisterActiveTimer(0.05f, FWidgetActiveTimerDelegate::CreateLambda([Weak = TWeakObjectPtr<UTSSStoreDeskWidget>(this)](double, float)
+	{
+		if (Weak.IsValid()) Weak->RefreshPage();
+		return EActiveTimerReturnType::Continue;
+	}));
+	return Root;
+}
+
+void UTSSStoreDeskWidget::SetDark(bool bDark)
+{
+	TSSDeskSetDark(bDark);
+	if (RootHost.IsValid()) RootHost->SetContent(BuildWindow());
+	bDirty = true;
+}
+
+TSharedRef<SWidget> UTSSStoreDeskWidget::BuildWindow()
+{
+	const FTSSDeskTheme& Th = TSSDeskTheme();
+	const bool bDark = TSSDeskDark();
+
 	// Side menu: one button per registered page.
 	TSharedRef<SVerticalBox> Menu = SNew(SVerticalBox);
 	const TArray<TSharedRef<FTSSDeskPage>>& Pages = TSSDeskPages();
@@ -77,26 +108,78 @@ TSharedRef<SWidget> UTSSStoreDeskWidget::RebuildWidget()
 		[
 			SNew(SButton)
 			.ButtonStyle(&TSSDeskButtonStyle())
-			.ButtonColorAndOpacity_Lambda([this, i]() { return FSlateColor(PageIndex == i ? FLinearColor(0.55f, 0.65f, 0.95f, 1.f) : WinChrome); })
+			.ButtonColorAndOpacity_Lambda([this, i, &Th]() { return FSlateColor(PageIndex == i ? Th.Select : Th.Button); })
 			.ContentPadding(FMargin(10.f, 9.f))
 			.OnClicked_Lambda([this, i]() { SetPage(i); return FReply::Handled(); })
 			[
-				SNew(STextBlock).Text(Pages[i]->Title()).Font(WinFont(true, 15)).ColorAndOpacity(WinInk)
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f)[ SNew(STextBlock).Text(Pages[i]->Title()).Font(WinFont(true, 15)).ColorAndOpacity(Th.Ink) ]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Font(WinFont(true, 11)).ColorAndOpacity(Th.Bad)
+					.Text_Lambda([this, i]() { return FText::FromString(Ctx.Biz ? TSSDeskPages()[i]->Badge(Ctx.Biz->GetLevel()) : FString()); })
+				]
 			]
 		];
 	}
 
 	PageHost = SNew(SBox);
 
+	// Dark-mode pill: a rounded switch with a sliding knob.
+	static const FSlateRoundedBoxBrush Round(FLinearColor::White, 11.f);
+	static const FSlateNoResource NoBrush;
+	static const FButtonStyle PillStyle = FButtonStyle().SetNormal(NoBrush).SetHovered(NoBrush).SetPressed(NoBrush).SetDisabled(NoBrush);
+	TSharedRef<SWidget> Pill =
+		SNew(SButton)
+		.ButtonStyle(&PillStyle)
+		.ContentPadding(FMargin(0.f))
+		.ToolTipText(FText::FromString(TEXT("Switch between light and dark mode")))
+		.OnClicked_Lambda([this, bDark]() { SetDark(!bDark); return FReply::Handled(); })
+		[
+			SNew(SBorder)
+			.BorderImage(&Round)
+			.BorderBackgroundColor(FLinearColor(1.f, 1.f, 1.f, 0.22f))
+			.Padding(FMargin(12.f, 3.f, 4.f, 3.f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
+				[
+					SNew(STextBlock).Text(FText::FromString(bDark ? TEXT("Dark mode") : TEXT("Light mode"))).Font(WinFont(true, 13)).ColorAndOpacity(FLinearColor::White)
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(46.f).HeightOverride(22.f)
+					[
+						SNew(SBorder)
+						.BorderImage(&Round)
+						.BorderBackgroundColor(bDark ? FLinearColor(0.3f, 0.55f, 1.f, 1.f) : FLinearColor(0.55f, 0.55f, 0.6f, 1.f))
+						.Padding(3.f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(bDark ? 1.f : 0.001f)[ SNew(SSpacer) ]
+							+ SHorizontalBox::Slot().AutoWidth()
+							[
+								SNew(SBox).WidthOverride(16.f).HeightOverride(16.f)
+								[
+									SNew(SBorder).BorderImage(&Round).BorderBackgroundColor(FLinearColor::White)
+								]
+							]
+							+ SHorizontalBox::Slot().FillWidth(bDark ? 0.001f : 1.f)[ SNew(SSpacer) ]
+						]
+					]
+				]
+			]
+		];
+
 	TSharedRef<SWidget> Window =
 		SNew(SBorder)
 		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-		.BorderBackgroundColor(FLinearColor(0.1f, 0.1f, 0.12f, 1.f))
+		.BorderBackgroundColor(Th.Border)
 		.Padding(2.f)
 		[
 			SNew(SBorder)
 			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-			.BorderBackgroundColor(WinChrome)
+			.BorderBackgroundColor(Th.Window)
 			.Padding(3.f)
 			[
 				SNew(SVerticalBox)
@@ -105,7 +188,7 @@ TSharedRef<SWidget> UTSSStoreDeskWidget::RebuildWidget()
 				[
 					SNew(SBorder)
 					.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-					.BorderBackgroundColor(WinNavy)
+					.BorderBackgroundColor(Th.TitleBar)
 					.Padding(FMargin(8.f, 4.f))
 					[
 						SNew(SHorizontalBox)
@@ -113,15 +196,19 @@ TSharedRef<SWidget> UTSSStoreDeskWidget::RebuildWidget()
 						[
 							SNew(STextBlock).Text(FText::FromString(TEXT("StoreDesk 1.0  -  Tech Store Systems"))).Font(WinFont(true, 16)).ColorAndOpacity(FLinearColor::White)
 						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 10.f, 0.f)
+						[
+							Pill
+						]
 						+ SHorizontalBox::Slot().AutoWidth()
 						[
 							SNew(SButton)
 							.ButtonStyle(&TSSDeskButtonStyle())
-							.ButtonColorAndOpacity(WinChrome)
+							.ButtonColorAndOpacity(Th.Button)
 							.ContentPadding(FMargin(10.f, 1.f))
 							.OnClicked_Lambda([this]() { if (OnClose) OnClose(); return FReply::Handled(); })
 							[
-								SNew(STextBlock).Text(FText::FromString(TEXT("Log Off  [Esc]"))).Font(WinFont(true, 13)).ColorAndOpacity(WinInk)
+								SNew(STextBlock).Text(FText::FromString(TEXT("Log Off  [Esc]"))).Font(WinFont(true, 13)).ColorAndOpacity(Th.Ink)
 							]
 						]
 					]
@@ -138,7 +225,7 @@ TSharedRef<SWidget> UTSSStoreDeskWidget::RebuildWidget()
 					[
 						SNew(SBorder)
 						.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-						.BorderBackgroundColor(FLinearColor(0.93f, 0.93f, 0.9f, 1.f))
+						.BorderBackgroundColor(Th.PageBg)
 						.Padding(12.f)
 						[
 							PageHost.ToSharedRef()
@@ -150,12 +237,12 @@ TSharedRef<SWidget> UTSSStoreDeskWidget::RebuildWidget()
 				[
 					SNew(SBorder)
 					.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-					.BorderBackgroundColor(FLinearColor(0.62f, 0.62f, 0.62f, 1.f))
+					.BorderBackgroundColor(Th.StatusBar)
 					.Padding(FMargin(8.f, 3.f))
 					[
 						SNew(STextBlock)
 						.Font(WinFont(false, 13))
-						.ColorAndOpacity(WinInk)
+						.ColorAndOpacity(Th.Ink)
 						.Text_Lambda([this]()
 						{
 							if (!Ctx.Store || !Ctx.Biz) return FText::GetEmpty();
@@ -172,7 +259,7 @@ TSharedRef<SWidget> UTSSStoreDeskWidget::RebuildWidget()
 		[
 			SNew(SBorder)
 			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-			.BorderBackgroundColor(FLinearColor(WinTeal.R, WinTeal.G, WinTeal.B, 0.94f))
+			.BorderBackgroundColor(Th.Backdrop)
 		]
 		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
 		[

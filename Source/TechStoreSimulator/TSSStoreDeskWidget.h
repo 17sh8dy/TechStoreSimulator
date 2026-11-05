@@ -24,6 +24,8 @@ public:
 	/** Called by the Log Off button / close box. */
 	void SetOnClose(TFunction<void()> Handler) { OnClose = MoveTemp(Handler); }
 	FTSSDeskContext& GetContext() { return Ctx; }
+	/** Light / dark appearance (the pill in the title bar). Saved with the user settings. */
+	void SetDark(bool bDark);
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -33,10 +35,14 @@ protected:
 
 private:
 	void MarkDirty() { bDirty = true; }
+	/** Rebuilds the visible page if something changed. Driven by a Slate timer, so it never depends on UMG ticking. */
+	void RefreshPage();
+	TSharedRef<SWidget> BuildWindow();
 
 	FTSSDeskContext Ctx;
 	int32 PageIndex = 0;
 	bool bDirty = true;
+	TSharedPtr<SBox> RootHost;
 	TSharedPtr<SBox> PageHost;
 	TFunction<void()> OnClose;
 	FDelegateHandle StoreHandle;
