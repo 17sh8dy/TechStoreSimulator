@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "TSSProducts.h"
+#include "TSSCheckoutTypes.h"
 #include "TSSStoreSubsystem.generated.h"
 
 DECLARE_MULTICAST_DELEGATE(FTSSStoreChanged);
@@ -23,8 +24,12 @@ public:
 	int32 GetPrice(ETSSProduct Product) const { return Prices[static_cast<int32>(Product)]; }
 	void SetPrice(ETSSProduct Product, int32 Price);
 
-	/** A customer paid at the register. */
-	void RecordSale(int32 Amount);
+	/** A finished checkout: the cash goes into the till and the sale is logged. */
+	void RecordSale(const FTSSTransaction& Sale);
+	int32 GetCashSales() const { return CashSales; }
+	int32 GetCardSales() const { return CardSales; }
+	int32 GetTaxCollected() const { return TaxCollected; }
+	const TArray<FTSSTransaction>& GetTransactions() const { return Transactions; }
 	/** A customer left without buying (too expensive, out of stock, or tired of waiting). */
 	void RecordWalkout();
 	int32 GetServed() const { return Served; }
@@ -39,6 +44,10 @@ public:
 private:
 	int32 Money = 1000;
 	int32 Served = 0;
+	int32 CashSales = 0;
+	int32 CardSales = 0;
+	int32 TaxCollected = 0;
+	TArray<FTSSTransaction> Transactions;
 	int32 Lost = 0;
 	bool bSimPaused = true;
 	int32 Prices[static_cast<int32>(ETSSProduct::Count)] = {};

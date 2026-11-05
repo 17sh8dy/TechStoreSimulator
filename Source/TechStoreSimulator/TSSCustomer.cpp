@@ -146,15 +146,37 @@ void ATSSCustomer::DecideToBuy()
 		return;
 	}
 
-	ETSSProduct Taken = ETSSProduct::None;
-	if (!Shelf->TakeOne(Wanted.Slot, Taken)) { WalkOut(TEXT("Sold out?!"), true); return; }
-	Carried = Taken;
-	AgreedPrice = Price;
-	CarriedMesh->SetRelativeScale3D(TSSProductDef(Carried).BoxSize / 100.f);
-	TSSApplyColor(CarriedMesh, TSSProductDef(Carried).Color);
+	// The basket: this item, plus up to two more from the same shelf if their price is fair too.
+	Basket.Reset();
+	auto TakeFrom = [&](int32 Slot) -> bool
+	{
+		const ETSSProduct P = Shelf->GetSlotProduct(Slot);
+		if (Shelf->GetSlotQty(Slot) == 0 || P == ETSSProduct::None) return false;
+		const int32 ItemPrice = Store->GetPrice(P);
+		if (ItemPrice > FMath::RoundToInt(TSSProductDef(P).WholesaleCost * MaxMarkup)) return false;
+		ETSSProduct Taken = ETSSProduct::None;
+		if (!Shelf->TakeOne(Slot, Taken)) return false;
+		Basket.Add({ Taken, ItemPrice, Slot });
+		return true;
+	};
+	if (!TakeFrom(Wanted.Slot)) { WalkOut(TEXT("Sold out?!"), true); return; }
+
+	const float Roll = FMath::FRand();
+	const int32 WantCount = Roll < 0.5f ? 1 : (Roll < 0.85f ? 2 : 3);
+	for (int32 n = 1; n < WantCount; ++n)
+	{
+		TArray<int32> Slots;
+		for (int32 i = 0; i < ATSSShelf::Tiers * ATSSShelf::Columns; ++i) if (Shelf->GetSlotQty(i) > 0) Slots.Add(i);
+		if (Slots.Num() == 0) break;
+		TakeFrom(Slots[FMath::RandRange(0, Slots.Num() - 1)]);
+	}
+
+	const FTSSProductDef& First = TSSProductDef(Basket[0].Product);
+	CarriedMesh->SetRelativeScale3D(First.BoxSize / 100.f);
+	TSSApplyColor(CarriedMesh, First.Color);
 	CarriedMesh->SetVisibility(true);
 
-	Say(TEXT("I'll take this one!"));
+	Say(Basket.Num() > 1 ? FString::Printf(TEXT("I'll take these %d!"), Basket.Num()) : FString(TEXT("I'll take this one!")));
 	Register->Join(this);
 	bQueued = true;
 	State = ETSSCustomerState::Queueing;
@@ -166,13 +188,10 @@ void ATSSCustomer::WalkOut(const FString& Reason, bool bUnhappy)
 {
 	if (Register) Register->Leave(this);
 	bQueued = false;
-	if (Carried != ETSSProduct::None)
-	{
-		// Put it back where it came from if there is still room; otherwise it is simply lost.
-		if (Wanted.Shelf.IsValid()) Wanted.Shelf->PutBack(Wanted.Slot, Carried);
-		Carried = ETSSProduct::None;
-		CarriedMesh->SetVisibility(false);
-	}
+	// Put anything taken back where it came from if there is still room; otherwise it is simply lost.
+	if (Wanted.Shelf.IsValid()) for (const FTSSBasketItem& B : Basket) Wanted.Shelf->PutBack(B.ShelfSlot, B.Product);
+	Basket.Reset();
+	CarriedMesh->SetVisibility(false);
 	if (bUnhappy)
 	{
 		if (UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>()) Store->RecordWalkout();
@@ -188,24 +207,67 @@ bool ATSSCustomer::IsReadyToPay() const
 	return FVector::DistSquared2D(GetActorLocation(), Register->QueueSpot(0)) < 15.f * 15.f;
 }
 
-void ATSSCustomer::CompleteSale()
+// ---- checkout ---------------------------------------------------------------------------------------
+
+void ATSSCustomer::StartCheckout()
 {
-	if (UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>()) Store->RecordSale(AgreedPrice);
-	Register->Leave(this);
+	State = ETSSCustomerState::AtCounter;
+	CarriedMesh->SetVisibility(false);
+	Say(TEXT("Here you go."), 2.5f);
+	Register->BeginTransaction(this, Basket);
+}
+
+void ATSSCustomer::PayNow(bool bInForceCash)
+{
+	bForceCash = bInForceCash;
+	bPaying = true;
+	PayTimer = 1.2f; // a moment to get the wallet out
+}
+
+void ATSSCustomer::DecidePayment()
+{
+	ETSSPayMethod Choice = ForceMethod != ETSSPayMethod::None ? ForceMethod : (FMath::FRand() < 0.55f ? ETSSPayMethod::Card : ETSSPayMethod::Cash);
+	if (bForceCash) Choice = ETSSPayMethod::Cash;
+
+	if (Choice == ETSSPayMethod::Card)
+	{
+		Say(TEXT("Card, please."), 3.f);
+		Register->CustomerTapsCard();
+		return;
+	}
+
+	// Cash: sometimes the exact amount, otherwise rounded up to a friendly note so the owner has change to count.
+	const int32 Total = Register->GetTotal();
+	int32 Amount = Total;
+	if (FMath::FRand() >= 0.3f)
+	{
+		TArray<int32> Options;
+		for (int32 Step : { 5, 10, 20, 50, 100 }) Options.AddUnique(((Total + Step - 1) / Step) * Step);
+		Amount = Options[FMath::RandRange(0, Options.Num() - 1)];
+	}
+	Say(FString::Printf(TEXT("Cash. Here's $%d."), Amount), 3.f);
+	Register->CustomerPaysCash(Amount);
+}
+
+void ATSSCustomer::FinishCheckout()
+{
+	Say(TEXT("Thanks, bye!"), 3.f);
+	if (Register) Register->Leave(this);
 	bQueued = false;
-	Say(TEXT("Thanks!"), 3.f);
+	bPaying = false;
+	// They carry their shopping out in a bag.
+	CarriedMesh->SetRelativeScale3D(FVector(0.22f, 0.16f, 0.3f));
+	TSSApplyColor(CarriedMesh, FLinearColor(0.9f, 0.9f, 0.92f));
+	CarriedMesh->SetVisibility(true);
 	State = ETSSCustomerState::Leaving;
 	StartPath({ Register->HubPoint, Register->DoorPoint, Register->SpawnPoint });
 }
 
 FString ATSSCustomer::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
 {
-	if (IsReadyToPay())
-	{
-		return FString::Printf(TEXT("[E] Ring up %s  ($%d)"), TSSProductDef(Carried).Name, AgreedPrice);
-	}
 	switch (State)
 	{
+	case ETSSCustomerState::AtCounter: return TEXT("Customer at the register");
 	case ETSSCustomerState::Queueing: return TEXT("Customer waiting in line");
 	case ETSSCustomerState::Leaving: return FString();
 	default: return TEXT("Customer browsing");
@@ -214,7 +276,6 @@ FString ATSSCustomer::GetPrompt(const ATSSCharacter* Player, const FHitResult& H
 
 void ATSSCustomer::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 {
-	if (IsReadyToPay()) CompleteSale();
 }
 
 void ATSSCustomer::Animate(float Dt, bool bWalking)
@@ -275,6 +336,11 @@ void ATSSCustomer::Tick(float Dt)
 				FaceToward(Register->GetActorLocation(), Dt);
 			}
 		}
+		if (IsReadyToPay() && Register->GetPhase() == ETSSCheckoutPhase::Idle)
+		{
+			StartCheckout();
+			break;
+		}
 		WaitedInLine += Dt;
 		if (!bSaidHurry && WaitedInLine > Patience * 0.55f)
 		{
@@ -284,6 +350,19 @@ void ATSSCustomer::Tick(float Dt)
 		if (WaitedInLine > Patience) WalkOut(TEXT("Forget it, I'm leaving!"), true);
 		break;
 	}
+
+	case ETSSCustomerState::AtCounter:
+		FaceToward(Register->GetActorLocation(), Dt);
+		if (bPaying)
+		{
+			PayTimer -= Dt * SpeedScale;
+			if (PayTimer <= 0.f)
+			{
+				bPaying = false;
+				DecidePayment();
+			}
+		}
+		break;
 
 	case ETSSCustomerState::Leaving:
 		if (FollowPath(Dt)) Destroy();

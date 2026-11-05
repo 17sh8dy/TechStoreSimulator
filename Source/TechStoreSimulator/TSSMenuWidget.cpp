@@ -13,7 +13,7 @@
 
 namespace
 {
-	const FLinearColor Dim(0.015f, 0.025f, 0.04f, 0.9f);
+	const FLinearColor DimColor(0.015f, 0.025f, 0.04f, 0.9f);
 	const FLinearColor Accent(0.12f, 0.5f, 0.95f, 1.f);
 	const FLinearColor Idle(0.12f, 0.15f, 0.2f, 1.f);
 	const FLinearColor Muted(0.62f, 0.68f, 0.75f, 1.f);
@@ -41,7 +41,7 @@ TSharedRef<SWidget> UTSSMenuWidget::RebuildWidget()
 	Content->SetContent(BuildMain());
 	return SNew(SBorder)
 		.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
-		.BorderBackgroundColor(Dim)
+		.BorderBackgroundColor(DimColor)
 		.HAlign(HAlign_Center)
 		.VAlign(VAlign_Center)
 		[

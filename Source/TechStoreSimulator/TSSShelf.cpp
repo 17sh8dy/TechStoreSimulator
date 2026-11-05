@@ -1,5 +1,6 @@
 #include "TSSShelf.h"
 #include "TSSCharacter.h"
+#include "TSSProductItem.h"
 #include "TSSStoreSubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "EngineUtils.h"
@@ -108,6 +109,7 @@ void ATSSShelf::RefreshSlot(int32 Index)
 
 FString ATSSShelf::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
 {
+	if (Player->GetHeldItem()) return TEXT("Scan this item or put it back on the counter");
 	const FSlot& Slot = Slots[SlotFromHit(Hit)];
 	const ETSSProduct Held = Player->GetHeld();
 	FString Out;
@@ -146,6 +148,7 @@ FString ATSSShelf::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit)
 
 void ATSSShelf::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 {
+	if (Player->GetHeldItem()) return;
 	const int32 Index = SlotFromHit(Hit);
 	FSlot& Slot = Slots[Index];
 	const ETSSProduct Held = Player->GetHeld();

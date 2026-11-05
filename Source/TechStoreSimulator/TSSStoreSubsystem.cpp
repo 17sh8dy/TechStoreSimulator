@@ -30,10 +30,15 @@ void UTSSStoreSubsystem::SetPrice(ETSSProduct Product, int32 Price)
 	OnChanged.Broadcast();
 }
 
-void UTSSStoreSubsystem::RecordSale(int32 Amount)
+void UTSSStoreSubsystem::RecordSale(const FTSSTransaction& Sale)
 {
 	++Served;
-	Earn(Amount);
+	FTSSTransaction Logged = Sale;
+	Logged.Id = Transactions.Num() + 1;
+	Transactions.Add(Logged);
+	(Sale.Method == ETSSPayMethod::Cash ? CashSales : CardSales) += Sale.Total;
+	TaxCollected += Sale.Tax; // collected, but not yet owed to anyone: tax liability is not modelled
+	Earn(Sale.Total);
 }
 
 void UTSSStoreSubsystem::RecordWalkout()

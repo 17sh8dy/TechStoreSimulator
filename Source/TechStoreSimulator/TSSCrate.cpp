@@ -1,5 +1,6 @@
 #include "TSSCrate.h"
 #include "TSSCharacter.h"
+#include "TSSProductItem.h"
 #include "TSSStoreSubsystem.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
@@ -51,6 +52,7 @@ void ATSSCrate::Tick(float DeltaSeconds)
 
 FString ATSSCrate::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
 {
+	if (Player->GetHeldItem()) return TEXT("Scan this item or put it back on the counter");
 	const FTSSProductDef& Def = TSSProductDef(Product);
 	const ETSSProduct Held = Player->GetHeld();
 	if (Held == ETSSProduct::None)
@@ -66,6 +68,7 @@ FString ATSSCrate::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit)
 
 void ATSSCrate::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 {
+	if (Player->GetHeldItem()) return;
 	UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
 	const int32 Cost = TSSProductDef(Product).WholesaleCost;
 	const ETSSProduct Held = Player->GetHeld();

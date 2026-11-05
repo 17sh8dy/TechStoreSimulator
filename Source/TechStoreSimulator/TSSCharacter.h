@@ -9,6 +9,7 @@ class UCameraComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
 class UTSSHumanComponent;
+class ATSSProductItem;
 class UTSSSettingsSubsystem;
 class ATSSInteractable;
 
@@ -24,6 +25,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	ETSSProduct GetHeld() const { return Held; }
+	/** The specific customer item in the hands (checkout), if any. Cleared when the hands empty. */
+	ATSSProductItem* GetHeldItem() const { return HeldItem; }
+	void SetHeldItem(ATSSProductItem* Item) { HeldItem = Item; }
 	/** Pass None to empty the hands. */
 	void SetHeld(ETSSProduct Product);
 
@@ -44,6 +48,7 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> HeldMesh;
 
 	ETSSProduct Held = ETSSProduct::None;
+	UPROPERTY() TObjectPtr<ATSSProductItem> HeldItem;
 	UPROPERTY() TObjectPtr<ATSSInteractable> Focus;
 	FHitResult FocusHit;
 	FString FocusPrompt;

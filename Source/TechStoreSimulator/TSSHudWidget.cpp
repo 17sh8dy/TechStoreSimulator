@@ -42,8 +42,8 @@ FText UTSSHudWidget::SalesText() const
 {
 	const UWorld* World = GetWorld();
 	const UTSSStoreSubsystem* Store = World ? World->GetSubsystem<UTSSStoreSubsystem>() : nullptr;
-	return FText::FromString(FString::Printf(TEXT("Customers served: %d    Walked out: %d"),
-		Store ? Store->GetServed() : 0, Store ? Store->GetLost() : 0));
+	return FText::FromString(FString::Printf(TEXT("Sales: %d   Cash $%d   Card $%d   Walked out: %d"),
+		Store ? Store->GetServed() : 0, Store ? Store->GetCashSales() : 0, Store ? Store->GetCardSales() : 0, Store ? Store->GetLost() : 0));
 }
 
 FText UTSSHudWidget::PromptText() const

@@ -1,86 +1,84 @@
 #include "TSSRegister.h"
 #include "TSSCustomer.h"
 #include "TSSCharacter.h"
-#include "TSSProducts.h"
+#include "TSSProductItem.h"
+#include "TSSRegisterDevice.h"
+#include "TSSStoreSubsystem.h"
+#include "Components/ChildActorComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 
 ATSSRegister::ATSSRegister()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SetRootComponent(Root);
 
-	// Local frame: X = depth (+X is the owner's side), Y = along the counter, Z up; origin on the floor, centred.
-	Counter = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Cabinet"));
-	SetRootComponent(Counter);
-	Counter->SetStaticMesh(TSSCubeMesh());
-	Counter->SetRelativeLocation(FVector(0.f, 0.f, 46.f));
-	Counter->SetRelativeScale3D(FVector(0.66f, 2.56f, 0.92f));
+	// Cabinet and counter top: the surface the whole sale happens on.
+	Cabinet = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Cabinet"));
+	Cabinet->SetupAttachment(Root);
+	Cabinet->SetStaticMesh(TSSCubeMesh());
+	Cabinet->SetRelativeLocation(FVector(0.f, 0.f, 46.f));
+	Cabinet->SetRelativeScale3D(FVector(0.66f, 2.56f, 0.92f));
 
-	auto Add = [this](const TCHAR* Name, FVector Loc, FVector Size, FLinearColor Color, FRotator Rot = FRotator::ZeroRotator)
+	auto Add = [this, Root](const TCHAR* Name, FVector Loc, FVector Size, FLinearColor Color)
 	{
 		UStaticMeshComponent* P = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-		P->SetupAttachment(GetRootComponent());
+		P->SetupAttachment(Root);
 		P->SetStaticMesh(TSSCubeMesh());
-		// Sizes are cm in the actor's frame; the root cabinet is non-uniformly scaled, so convert for the child.
-		P->SetRelativeLocation(FVector(Loc.X / 0.66f, Loc.Y / 2.56f, (Loc.Z - 46.f) / 0.92f));
-		P->SetRelativeRotation(Rot);
-		P->SetRelativeScale3D(FVector(Size.X / 66.f, Size.Y / 256.f, Size.Z / 92.f));
+		P->SetRelativeLocation(Loc);
+		P->SetRelativeScale3D(Size / 100.f);
 		Parts.Add(P);
 		PartColors.Add(Color);
 		return P;
 	};
-
-	const FLinearColor Dark(0.07f, 0.07f, 0.09f);
-	const FLinearColor Steel(0.55f, 0.57f, 0.6f);
 	Add(TEXT("Kick"), FVector(0.f, 0.f, 4.f), FVector(60.f, 250.f, 8.f), FLinearColor(0.05f, 0.05f, 0.06f));
 	Add(TEXT("Top"), FVector(-2.f, 0.f, 95.f), FVector(80.f, 270.f, 6.f), FLinearColor(0.9f, 0.9f, 0.92f));
 	Add(TEXT("Panel"), FVector(-34.f, 0.f, 48.f), FVector(2.f, 220.f, 64.f), FLinearColor(0.08f, 0.45f, 0.9f));
 	Add(TEXT("PanelTrim"), FVector(-34.5f, 0.f, 82.f), FVector(1.f, 230.f, 4.f), FLinearColor(0.95f, 0.95f, 1.f));
-	// Point-of-sale terminal: base with a cash drawer, and an angled customer-facing screen.
-	Add(TEXT("PosBase"), FVector(8.f, -70.f, 104.f), FVector(30.f, 46.f, 12.f), Dark);
-	Add(TEXT("Drawer"), FVector(23.5f, -70.f, 102.f), FVector(2.f, 38.f, 5.f), Steel);
-	Add(TEXT("PosNeck"), FVector(6.f, -70.f, 116.f), FVector(5.f, 6.f, 14.f), Dark);
-	Add(TEXT("PosScreen"), FVector(6.f, -70.f, 134.f), FVector(4.f, 40.f, 26.f), Dark, FRotator(-12.f, 0.f, 0.f));
-	Add(TEXT("PosGlass"), FVector(8.1f, -70.f, 134.f), FVector(0.5f, 36.f, 22.f), FLinearColor(0.02f, 0.18f, 0.12f), FRotator(-12.f, 0.f, 0.f));
-	// Card reader on the customer's side, receipt printer and scanner along the counter.
-	Add(TEXT("CardReader"), FVector(-22.f, -20.f, 99.5f), FVector(10.f, 7.f, 2.5f), Dark, FRotator(0.f, 0.f, -10.f));
-	Add(TEXT("PrinterBody"), FVector(6.f, -112.f, 103.f), FVector(14.f, 16.f, 12.f), Dark);
-	Add(TEXT("PrinterPaper"), FVector(6.f, -112.f, 111.f), FVector(8.f, 8.f, 5.f), FLinearColor(0.96f, 0.96f, 0.94f));
-	Add(TEXT("ScannerBase"), FVector(0.f, 40.f, 98.5f), FVector(22.f, 30.f, 2.f), Dark);
-	Add(TEXT("ScannerGlass"), FVector(0.f, 40.f, 99.7f), FVector(16.f, 24.f, 0.5f), FLinearColor(0.9f, 0.1f, 0.1f));
 
-	ScreenText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("ScreenText"));
-	ScreenText->SetupAttachment(GetRootComponent());
-	ScreenText->SetRelativeLocation(FVector(9.f / 0.66f, -70.f / 2.56f, (134.f - 46.f) / 0.92f));
-	ScreenText->SetRelativeRotation(FRotator(-12.f, 0.f, 0.f));
-	ScreenText->SetRelativeScale3D(FVector(1.f / 0.66f, 1.f / 2.56f, 1.f / 0.92f));
-	ScreenText->SetWorldSize(7.f);
-	ScreenText->SetHorizontalAlignment(EHTA_Center);
-	ScreenText->SetVerticalAlignment(EVRTA_TextCenter);
-	ScreenText->SetTextRenderColor(FColor(80, 255, 170));
-	ScreenText->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	ScreenText->SetText(FText::FromString(TEXT("OPEN")));
+	// The customer's cash, lying on the counter while it is being counted.
+	CashPile = Add(TEXT("CashPile"), FVector(4.f, 95.f, TopZ + 1.5f), FVector(16.f, 7.f, 3.f), FLinearColor(0.25f, 0.6f, 0.3f));
+	CashPile->SetVisibility(false);
+	CashText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("CashText"));
+	CashText->SetupAttachment(Root);
+	CashText->SetRelativeLocation(FVector(4.f, 95.f, TopZ + 12.f));
+	CashText->SetWorldSize(7.f);
+	CashText->SetHorizontalAlignment(EHTA_Center);
+	CashText->SetTextRenderColor(FColor(120, 255, 150));
+	CashText->SetVisibility(false);
+
+	// The devices: each is its own actor with its own behaviour.
+	MonitorComp = CreateDefaultSubobject<UChildActorComponent>(TEXT("MonitorComp"));
+	KeyboardComp = CreateDefaultSubobject<UChildActorComponent>(TEXT("KeyboardComp"));
+	ScannerComp = CreateDefaultSubobject<UChildActorComponent>(TEXT("ScannerComp"));
+	DrawerComp = CreateDefaultSubobject<UChildActorComponent>(TEXT("DrawerComp"));
+	TerminalComp = CreateDefaultSubobject<UChildActorComponent>(TEXT("TerminalComp"));
+	PrinterComp = CreateDefaultSubobject<UChildActorComponent>(TEXT("PrinterComp"));
+	MonitorComp->SetChildActorClass(ATSSRegisterMonitor::StaticClass());
+	KeyboardComp->SetChildActorClass(ATSSRegisterKeyboard::StaticClass());
+	ScannerComp->SetChildActorClass(ATSSScanner::StaticClass());
+	DrawerComp->SetChildActorClass(ATSSCashDrawer::StaticClass());
+	TerminalComp->SetChildActorClass(ATSSCardTerminal::StaticClass());
+	PrinterComp->SetChildActorClass(ATSSReceiptPrinter::StaticClass());
+	UChildActorComponent* All[] = { MonitorComp, KeyboardComp, ScannerComp, DrawerComp, TerminalComp, PrinterComp };
+	for (UChildActorComponent* C : All) C->SetupAttachment(Root);
 }
 
 void ATSSRegister::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	TSSApplyColor(Counter, FLinearColor(0.2f, 0.15f, 0.11f));
-	for (int32 i = 0; i < Parts.Num(); ++i) TSSApplyColor(Parts[i], PartColors[i]);
+	TSSApplyColor(Cabinet, FLinearColor(0.2f, 0.15f, 0.11f));
+	for (int32 i = 0; i < Parts.Num() && i < PartColors.Num(); ++i) if (Parts[i]) TSSApplyColor(Parts[i], PartColors[i]);
 }
 
-void ATSSRegister::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-	TextTimer -= DeltaSeconds;
-	if (TextTimer > 0.f) return;
-	TextTimer = 0.2f;
-	const ATSSCustomer* C = Front();
-	FString Text = TEXT("OPEN");
-	if (C && C->IsReadyToPay()) Text = FString::Printf(TEXT("TOTAL\n$%d"), C->GetAgreedPrice());
-	else if (C) Text = TEXT("...");
-	ScreenText->SetText(FText::FromString(Text));
-}
+ATSSScanner* ATSSRegister::GetScanner() const { return Cast<ATSSScanner>(ScannerComp->GetChildActor()); }
+ATSSCashDrawer* ATSSRegister::GetDrawer() const { return Cast<ATSSCashDrawer>(DrawerComp->GetChildActor()); }
+ATSSCardTerminal* ATSSRegister::GetTerminal() const { return Cast<ATSSCardTerminal>(TerminalComp->GetChildActor()); }
+ATSSReceiptPrinter* ATSSRegister::GetPrinter() const { return Cast<ATSSReceiptPrinter>(PrinterComp->GetChildActor()); }
+ATSSRegisterKeyboard* ATSSRegister::GetKeyboard() const { return Cast<ATSSRegisterKeyboard>(KeyboardComp->GetChildActor()); }
+
+// ---- the line -------------------------------------------------------------------------------------
 
 ATSSCustomer* ATSSRegister::Front() const
 {
@@ -93,44 +91,392 @@ FVector ATSSRegister::QueueSpot(int32 Index) const
 	return GetActorTransform().TransformPosition(FVector(-80.f - 70.f * Index, 0.f, 0.f)) * FVector(1.f, 1.f, 0.f);
 }
 
-int32 ATSSRegister::Join(ATSSCustomer* Customer)
+int32 ATSSRegister::Join(ATSSCustomer* Who)
 {
 	Queue.RemoveAll([](const TWeakObjectPtr<ATSSCustomer>& C) { return !C.IsValid(); });
-	Queue.AddUnique(Customer);
+	Queue.AddUnique(Who);
 	return Queue.Num() - 1;
 }
 
-void ATSSRegister::Leave(ATSSCustomer* Customer)
+void ATSSRegister::Leave(ATSSCustomer* Who)
 {
-	Queue.RemoveAll([Customer](const TWeakObjectPtr<ATSSCustomer>& C) { return !C.IsValid() || C.Get() == Customer; });
+	Queue.RemoveAll([Who](const TWeakObjectPtr<ATSSCustomer>& C) { return !C.IsValid() || C.Get() == Who; });
 }
 
-int32 ATSSRegister::IndexOf(const ATSSCustomer* Customer) const
+int32 ATSSRegister::IndexOf(const ATSSCustomer* Who) const
 {
 	for (int32 i = 0; i < Queue.Num(); ++i)
 	{
-		if (Queue[i].Get() == Customer) return i;
+		if (Queue[i].Get() == Who) return i;
 	}
 	return INDEX_NONE;
 }
 
-bool ATSSRegister::Checkout()
+// ---- layout on the counter ------------------------------------------------------------------------
+
+FVector ATSSRegister::StagingSlot(int32 Index) const
 {
-	ATSSCustomer* C = Front();
-	if (!C || !C->IsReadyToPay()) return false;
-	C->CompleteSale();
+	return GetActorTransform().TransformPosition(FVector(-24.f, 108.f - 38.f * (Index % 3), TopZ));
+}
+
+FVector ATSSRegister::BaggingSlot(int32 Index) const
+{
+	return GetActorTransform().TransformPosition(FVector(-24.f, -40.f - 30.f * (Index % 3), TopZ));
+}
+
+// ---- the sale -------------------------------------------------------------------------------------
+
+void ATSSRegister::SetNotice(const FString& Text, float Seconds)
+{
+	Notice = Text;
+	NoticeTimer = Seconds;
+}
+
+void ATSSRegister::RecalculateTotals()
+{
+	Subtotal = 0;
+	for (const FTSSSaleLine& L : Lines) Subtotal += L.Total();
+	Tax = TSSMoney::TaxFor(Subtotal);
+	Total = Subtotal + Tax;
+}
+
+int32 ATSSRegister::ItemsLeftToScan() const
+{
+	int32 N = 0;
+	for (const ATSSProductItem* I : Items) if (I && !I->bScanned) ++N;
+	return N;
+}
+
+int32 ATSSRegister::GetChangeGiven() const
+{
+	int32 S = 0;
+	for (int32 B : ChangeBills) S += B;
+	return S;
+}
+
+void ATSSRegister::BeginTransaction(ATSSCustomer* Who, const TArray<FTSSBasketItem>& Basket)
+{
+	Reset();
+	Customer = Who;
+	for (int32 i = 0; i < Basket.Num(); ++i)
+	{
+		FActorSpawnParameters P;
+		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ATSSProductItem* Item = GetWorld()->SpawnActor<ATSSProductItem>(ATSSProductItem::StaticClass(), FTransform(StagingSlot(i)), P);
+		if (!Item) continue;
+		Item->Init(Basket[i].Product, Basket[i].Price, this);
+		Item->PlaceAt(StagingSlot(i), GetActorRotation());
+		Items.Add(Item);
+	}
+	Phase = ETSSCheckoutPhase::Scanning;
+	SetNotice(TEXT("Scan the customer's items"), 4.f);
+}
+
+void ATSSRegister::Reset()
+{
+	for (ATSSProductItem* I : Items) if (I) I->Destroy();
+	Items.Reset();
+	Lines.Reset();
+	ChangeBills.Reset();
+	Subtotal = Tax = Total = CashReceived = ChangeDue = ScannedCount = 0;
+	Method = ETSSPayMethod::None;
+	bCardApproved = false;
+	CashPile->SetVisibility(false);
+	CashText->SetVisibility(false);
+}
+
+bool ATSSRegister::ScanItem(ATSSProductItem* Item, FString& Why)
+{
+	if (Phase != ETSSCheckoutPhase::Scanning) { Why = TEXT("No sale in progress"); return false; }
+	if (!Item || !Items.Contains(Item)) { Why = TEXT("That is not part of this sale"); return false; }
+	if (Item->bScanned) { Why = TEXT("Already scanned"); return false; }
+
+	Item->bScanned = true;
+	FTSSSaleLine* Line = Lines.FindByPredicate([Item](const FTSSSaleLine& L) { return L.Product == Item->Product && L.UnitPrice == Item->UnitPrice; });
+	if (Line) ++Line->Qty;
+	else Lines.Add({ Item->Product, 1, Item->UnitPrice });
+	RecalculateTotals();
+
+	// Scanned items go to the bagging side of the counter.
+	Item->PlaceAt(BaggingSlot(ScannedCount++), GetActorRotation());
+	Why = FString::Printf(TEXT("Scanned %s"), TSSProductDef(Item->Product).Name);
 	return true;
 }
 
+bool ATSSRegister::TryScanHeld(ATSSCharacter* Player)
+{
+	FString Why;
+	ATSSProductItem* Item = Player->GetHeldItem();
+	if (!Item)
+	{
+		SetNotice(Player->GetHeld() == ETSSProduct::None ? TEXT("Pick up one of the customer's items") : TEXT("That is not the customer's item"));
+		return false;
+	}
+	const bool bOk = ScanItem(Item, Why);
+	SetNotice(Why);
+	if (bOk) Player->SetHeld(ETSSProduct::None);
+	if (ATSSScanner* S = GetScanner()) S->Beep(bOk);
+	return bOk;
+}
+
+FString ATSSRegister::ScannerPrompt(const ATSSCharacter* Player) const
+{
+	if (Phase != ETSSCheckoutPhase::Scanning) return TEXT("Barcode scanner");
+	if (const ATSSProductItem* I = Player->GetHeldItem())
+	{
+		return I->bScanned ? FString(TEXT("Already scanned")) : FString::Printf(TEXT("[E] Scan %s  ($%d)"), TSSProductDef(I->Product).Name, I->UnitPrice);
+	}
+	return TEXT("Hold an item here to scan it");
+}
+
+FString ATSSRegister::KeyboardPrompt() const
+{
+	switch (Phase)
+	{
+	case ETSSCheckoutPhase::Idle: return TEXT("Register keyboard\nNo customer yet");
+	case ETSSCheckoutPhase::Scanning:
+	{
+		const int32 Left = ItemsLeftToScan();
+		return Left > 0 ? FString::Printf(TEXT("Scan all items first  (%d left)"), Left) : FString::Printf(TEXT("[E] Charge  $%d"), Total);
+	}
+	case ETSSCheckoutPhase::WaitingForPayment: return TEXT("Waiting for the customer to pay...");
+	case ETSSCheckoutPhase::CashDue:
+		return FString::Printf(TEXT("[E] Confirm change\nGiving $%d of $%d due"), GetChangeGiven(), ChangeDue);
+	case ETSSCheckoutPhase::Receipt: return TEXT("Hand over the receipt");
+	default: return TEXT("Waiting for the card payment...");
+	}
+}
+
+void ATSSRegister::KeyboardPress()
+{
+	if (Phase == ETSSCheckoutPhase::Scanning && Items.Num() > 0 && ItemsLeftToScan() == 0)
+	{
+		Phase = ETSSCheckoutPhase::WaitingForPayment;
+		SetNotice(FString::Printf(TEXT("Total $%d  -  waiting for payment"), Total), 6.f);
+		if (Customer) Customer->PayNow(false);
+	}
+	else if (Phase == ETSSCheckoutPhase::CashDue)
+	{
+		ConfirmChange();
+	}
+}
+
+// ---- cash -----------------------------------------------------------------------------------------
+
+void ATSSRegister::CustomerPaysCash(int32 Amount)
+{
+	Phase = ETSSCheckoutPhase::CashDue;
+	Method = ETSSPayMethod::Cash;
+	CashReceived = Amount;
+	ChangeDue = Amount - Total;
+	ChangeBills.Reset();
+	CashPile->SetVisibility(true);
+	CashText->SetVisibility(true);
+	CashText->SetText(FText::FromString(FString::Printf(TEXT("$%d"), Amount)));
+	if (ATSSCashDrawer* D = GetDrawer()) D->SetOpen(true);
+	SetNotice(ChangeDue > 0 ? FString::Printf(TEXT("Give $%d change"), ChangeDue) : FString(TEXT("Exact amount - confirm")), 6.f);
+}
+
+void ATSSRegister::AddChange(int32 Denom)
+{
+	if (Phase != ETSSCheckoutPhase::CashDue) return;
+	ChangeBills.Add(Denom);
+}
+
+void ATSSRegister::RemoveLastChange()
+{
+	if (Phase == ETSSCheckoutPhase::CashDue && ChangeBills.Num() > 0) ChangeBills.Pop();
+}
+
+FString ATSSRegister::DrawerPrompt() const
+{
+	if (Phase != ETSSCheckoutPhase::CashDue) return TEXT("Cash drawer");
+	return FString::Printf(TEXT("[E] Add this bill to the change   |   [Wheel] take the last one back\nGiving $%d of $%d"), GetChangeGiven(), ChangeDue);
+}
+
+void ATSSRegister::ConfirmChange()
+{
+	if (GetChangeGiven() == ChangeDue)
+	{
+		Complete(ETSSPayMethod::Cash);
+		return;
+	}
+	// Wrong change: the customer sends it back and the tray is cleared.
+	SetNotice(GetChangeGiven() < ChangeDue ? TEXT("Not enough change!") : TEXT("Too much change!"), 3.f);
+	ChangeBills.Reset();
+	if (Customer) Customer->Complain(TEXT("That's not the right change!"));
+}
+
+// ---- card -----------------------------------------------------------------------------------------
+
+void ATSSRegister::CustomerTapsCard()
+{
+	Phase = ETSSCheckoutPhase::CardTap;
+	Method = ETSSPayMethod::Card;
+	PhaseTimer = 1.0f;
+	if (ATSSCardTerminal* T = GetTerminal()) T->SetCardPresent(true);
+}
+
+void ATSSRegister::ProcessCard()
+{
+	if (Phase != ETSSCheckoutPhase::CardReady) return;
+	Phase = ETSSCheckoutPhase::CardProcessing;
+	PhaseTimer = 1.6f;
+}
+
+FString ATSSRegister::TerminalPrompt() const
+{
+	if (Phase == ETSSCheckoutPhase::CardReady) return FString::Printf(TEXT("[E] Process card payment  ($%d)"), Total);
+	return TEXT("Card terminal");
+}
+
+FString ATSSRegister::TerminalStatus() const
+{
+	switch (Phase)
+	{
+	case ETSSCheckoutPhase::CardTap: return TEXT("TAP CARD");
+	case ETSSCheckoutPhase::CardReady: return TEXT("PRESS TO PAY");
+	case ETSSCheckoutPhase::CardProcessing:
+		return FString(TEXT("PROCESSING")) + FString::ChrN(1 + (static_cast<int32>(GetWorld()->GetTimeSeconds() * 3.f) % 3), TEXT('.'));
+	case ETSSCheckoutPhase::CardResult: return bCardApproved ? TEXT("APPROVED") : TEXT("DECLINED");
+	case ETSSCheckoutPhase::Receipt: return Method == ETSSPayMethod::Card ? TEXT("THANK YOU") : TEXT("STANDBY");
+	default: return TEXT("STANDBY");
+	}
+}
+
+FLinearColor ATSSRegister::TerminalColor() const
+{
+	switch (Phase)
+	{
+	case ETSSCheckoutPhase::CardTap: return FLinearColor(0.1f, 0.4f, 0.85f);
+	case ETSSCheckoutPhase::CardReady: return FLinearColor(0.85f, 0.55f, 0.05f);
+	case ETSSCheckoutPhase::CardProcessing: return FLinearColor(0.2f, 0.3f, 0.5f);
+	case ETSSCheckoutPhase::CardResult: return bCardApproved ? FLinearColor(0.1f, 0.65f, 0.3f) : FLinearColor(0.8f, 0.15f, 0.15f);
+	default: return FLinearColor(0.1f, 0.12f, 0.16f);
+	}
+}
+
+// ---- finishing ------------------------------------------------------------------------------------
+
+void ATSSRegister::Complete(ETSSPayMethod PaidBy)
+{
+	FTSSTransaction T;
+	T.Items = Items.Num();
+	T.Subtotal = Subtotal;
+	T.Tax = Tax;
+	T.Total = Total;
+	T.Method = PaidBy;
+	T.CashReceived = PaidBy == ETSSPayMethod::Cash ? CashReceived : 0;
+	T.Change = PaidBy == ETSSPayMethod::Cash ? ChangeDue : 0;
+	if (UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>()) Store->RecordSale(T);
+
+	if (ATSSCashDrawer* D = GetDrawer())
+	{
+		if (PaidBy == ETSSPayMethod::Cash) D->AddCash(CashReceived - ChangeDue);
+		D->SetOpen(false);
+	}
+	CashPile->SetVisibility(false);
+	CashText->SetVisibility(false);
+	LastTotal = Total;
+	if (ATSSReceiptPrinter* P = GetPrinter()) P->Print(T);
+	if (Customer) Customer->Say(TEXT("Thank you!"), 3.f);
+	Phase = ETSSCheckoutPhase::Receipt;
+	PhaseTimer = 9.f; // handed over automatically if the owner is busy
+	SetNotice(TEXT("Sale complete  -  hand over the receipt"), 6.f);
+}
+
+FString ATSSRegister::PrinterPrompt() const
+{
+	return Phase == ETSSCheckoutPhase::Receipt ? FString(TEXT("[E] Hand the receipt to the customer")) : FString(TEXT("Receipt printer"));
+}
+
+void ATSSRegister::TakeReceipt()
+{
+	if (Phase != ETSSCheckoutPhase::Receipt) return;
+	if (ATSSReceiptPrinter* P = GetPrinter()) P->Tear();
+	if (ATSSCardTerminal* T = GetTerminal()) T->SetCardPresent(false);
+	ATSSCustomer* Who = Customer;
+	Customer = nullptr;
+	Reset();
+	Phase = ETSSCheckoutPhase::Idle;
+	if (Who) Who->FinishCheckout();
+}
+
+// ---- the counter surface --------------------------------------------------------------------------
+
 FString ATSSRegister::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
 {
-	const ATSSCustomer* C = Front();
-	if (!C) return TEXT("Register\nNo customers");
-	if (!C->IsReadyToPay()) return TEXT("Register\nA customer is walking up...");
-	return FString::Printf(TEXT("[E] Ring up %s  ($%d)"), TSSProductDef(C->GetCarried()).Name, C->GetAgreedPrice());
+	if (Player->GetHeldItem())
+	{
+		return Phase == ETSSCheckoutPhase::Scanning ? FString(TEXT("[E] Put the item down")) : FString(TEXT("Scan it, or put it down on the counter"));
+	}
+	return Phase == ETSSCheckoutPhase::Idle ? FString(TEXT("Checkout counter")) : FString();
 }
 
 void ATSSRegister::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 {
-	Checkout();
+	ATSSProductItem* Item = Player->GetHeldItem();
+	if (!Item) return;
+	// Only onto the flat top of the counter.
+	if (Hit.ImpactNormal.Z < 0.7f) return;
+	Item->PlaceAt(Hit.ImpactPoint, GetActorRotation());
+	Player->SetHeld(ETSSProduct::None);
+}
+
+// ---- tick: card timers, notice, auto receipt ------------------------------------------------------
+
+void ATSSRegister::Tick(float Dt)
+{
+	Super::Tick(Dt);
+	if (NoticeTimer > 0.f)
+	{
+		NoticeTimer -= Dt;
+		if (NoticeTimer <= 0.f) Notice.Reset();
+	}
+
+	switch (Phase)
+	{
+	case ETSSCheckoutPhase::CardTap:
+		PhaseTimer -= Dt;
+		if (PhaseTimer <= 0.f)
+		{
+			Phase = ETSSCheckoutPhase::CardReady;
+			SetNotice(TEXT("Card ready  -  process the payment on the terminal"), 5.f);
+		}
+		break;
+	case ETSSCheckoutPhase::CardProcessing:
+		PhaseTimer -= Dt;
+		if (PhaseTimer <= 0.f)
+		{
+			bCardApproved = FMath::FRand() >= CardDeclineChance;
+			Phase = ETSSCheckoutPhase::CardResult;
+			PhaseTimer = 1.4f;
+		}
+		break;
+	case ETSSCheckoutPhase::CardResult:
+		PhaseTimer -= Dt;
+		if (PhaseTimer <= 0.f)
+		{
+			if (bCardApproved)
+			{
+				Complete(ETSSPayMethod::Card);
+			}
+			else
+			{
+				// Declined: the customer tries cash instead.
+				if (ATSSCardTerminal* T = GetTerminal()) T->SetCardPresent(false);
+				Phase = ETSSCheckoutPhase::WaitingForPayment;
+				Method = ETSSPayMethod::None;
+				SetNotice(TEXT("Card declined  -  customer will pay cash"), 4.f);
+				if (Customer) { Customer->Complain(TEXT("Declined?! Let me pay cash.")); Customer->PayNow(true); }
+			}
+		}
+		break;
+	case ETSSCheckoutPhase::Receipt:
+		PhaseTimer -= Dt;
+		if (PhaseTimer <= 0.f) TakeReceipt();
+		break;
+	default:
+		break;
+	}
 }

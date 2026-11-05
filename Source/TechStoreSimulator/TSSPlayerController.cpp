@@ -12,6 +12,9 @@
 #include "TSSSettings.h"
 #include "TSSCustomerSubsystem.h"
 #include "TSSRegister.h"
+#include "TSSRegisterDevice.h"
+#include "TSSCheckoutTypes.h"
+#include "TSSProductItem.h"
 
 void ATSSPlayerController::BeginPlay()
 {
@@ -211,15 +214,18 @@ void ATSSPlayerController::TSSCustomer()
 
 void ATSSPlayerController::TSSCustomerTest()
 {
+	// Drives three customers through the real shop with the real device code:
+	//   run 0: pays CASH (wrong change first, then right), run 1: pays by CARD, run 2: balks at the price.
 	struct FState
 	{
-		int32 Phase = 0; // 0 = a fair-priced customer should buy, 1 = an overpriced shop should lose one
+		int32 Run = 0;
+		int32 Step = 0;
 		TWeakObjectPtr<ATSSCustomer> Customer;
-		int32 Money0 = 0, Served0 = 0, Lost0 = 0;
-		float Elapsed = 0.f;
+		int32 Money0 = 0, Served0 = 0, Lost0 = 0, Cash0 = 0, Card0 = 0, Tax0 = 0, Txns0 = 0;
+		int32 ExpectedTotal = 0, ExpectedSub = 0;
+		float Hold = 0.f;      // wait before the next action (lets a screenshot happen)
+		float Elapsed = 0.f;   // time in the current step
 		int32 Fails = 0;
-		bool bShot = false;
-		float ShotAt = 0.f;
 		TMap<ETSSProduct, int32> OldPrices;
 	};
 	TSharedRef<FState> St = MakeShared<FState>();
@@ -228,86 +234,185 @@ void ATSSPlayerController::TSSCustomerTest()
 	UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
 	ATSSRegister* Reg = nullptr;
 	for (TActorIterator<ATSSRegister> It(GetWorld()); It; ++It) { Reg = *It; break; }
+	ATSSCharacter* Me = Cast<ATSSCharacter>(GetPawn());
 	auto Check = [St](const TCHAR* Name, bool bOk)
 	{
 		UE_LOG(LogTemp, Display, TEXT("TSSTEST %s %s"), bOk ? TEXT("PASS") : TEXT("FAIL"), Name);
 		if (!bOk) ++St->Fails;
 	};
-	Check(TEXT("customer subsystem, store and register exist"), CS && Store && Reg);
-	if (!(CS && Store && Reg)) return;
+	Check(TEXT("customer subsystem, store, register and player exist"), CS && Store && Reg && Me);
+	if (!(CS && Store && Reg && Me)) return;
+	Check(TEXT("register has all six devices"), Reg->GetScanner() && Reg->GetDrawer() && Reg->GetTerminal() && Reg->GetPrinter() && Reg->GetKeyboard());
+	if (!(Reg->GetScanner() && Reg->GetDrawer() && Reg->GetTerminal() && Reg->GetPrinter() && Reg->GetKeyboard())) return;
+
 	TSSStart();
 	CS->bAutoSpawn = false;
+	Reg->CardDeclineChance = 0.f; // deterministic; the decline path has its own check below
+	if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>()) Cfg->SetViewMode(ETSSViewMode::FirstPerson);
 
-	// Phase 0 starts now: fair prices, one customer, hurried 8x.
-	St->Money0 = Store->GetMoney(); St->Served0 = Store->GetServed(); St->Lost0 = Store->GetLost();
-	St->Customer = CS->SpawnCustomer(8.f);
+	auto Spawn = [this, St, CS, Store](ETSSPayMethod Method)
+	{
+		St->Step = 0; St->Elapsed = 0.f; St->Hold = 0.f;
+		St->Money0 = Store->GetMoney(); St->Served0 = Store->GetServed(); St->Lost0 = Store->GetLost();
+		St->Cash0 = Store->GetCashSales(); St->Card0 = Store->GetCardSales(); St->Tax0 = Store->GetTaxCollected();
+		St->Txns0 = Store->GetTransactions().Num();
+		ATSSCustomer* C = CS->SpawnCustomer(8.f);
+		St->Customer = C;
+		if (C) { C->Patience = 300.f; C->ForceMethod = Method; }
+	};
+	// Camera helper: stand on the owner's side at register-local P, look at register-local T, then screenshot.
+	auto Snap = [this, Reg](FVector P, FVector T)
+	{
+		const FVector Wp = Reg->GetActorTransform().TransformPosition(P);
+		const FVector Wt = Reg->GetActorTransform().TransformPosition(T);
+		const FRotator R = (Wt - (Wp + FVector(0.f, 0.f, 154.f))).Rotation();
+		ConsoleCommand(FString::Printf(TEXT("TSSLook %f %f 90 %f %f"), Wp.X, Wp.Y, R.Yaw, R.Pitch));
+		FTimerHandle T2;
+		GetWorldTimerManager().SetTimer(T2, [this]() { ConsoleCommand(TEXT("Shot ShowUI")); }, 0.6f, false);
+	};
+
+	Spawn(ETSSPayMethod::Cash);
 	Check(TEXT("a customer spawns at the door"), St->Customer.IsValid());
-	if (St->Customer.IsValid()) St->Customer->Patience = 120.f;
 
 	FTimerHandle* Handle = new FTimerHandle();
-	GetWorldTimerManager().SetTimer(*Handle, [this, St, CS, Store, Reg, Check, Handle]()
+	GetWorldTimerManager().SetTimer(*Handle, [this, St, CS, Store, Reg, Me, Check, Spawn, Snap, Handle]()
 	{
-		St->Elapsed += 0.2f;
+		const float Dt = 0.2f;
+		St->Elapsed += Dt;
+		if (St->Hold > 0.f) { St->Hold -= Dt; return; }
 		const bool bTimeout = St->Elapsed > 40.f;
-		if (St->Phase == 0)
-		{
-			ATSSCustomer* C = St->Customer.Get();
-			if (C && C->IsReadyToPay() && !St->bShot)
-			{
-				// Frame the register for a screenshot, then ring up a second later.
-				St->bShot = true;
-				St->ShotAt = St->Elapsed;
-				{
-					// Stand behind the counter (owner's side) and look at the customer at the front of the line.
-					if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>()) Cfg->SetViewMode(ETSSViewMode::FirstPerson);
-					const FVector Me = Reg->GetActorLocation() + Reg->GetActorForwardVector() * 60.f;
-					const FVector To = Reg->QueueSpot(0) - Me;
-					ConsoleCommand(FString::Printf(TEXT("TSSLook %f %f 130 %f -8"), Me.X, Me.Y, To.Rotation().Yaw));
-				}
-				FTimerHandle T;
-				GetWorldTimerManager().SetTimer(T, [this]() { ConsoleCommand(TEXT("Shot ShowUI")); }, 0.5f, false);
-			}
-			if (C && C->IsReadyToPay() && St->bShot && St->Elapsed - St->ShotAt > 1.2f)
-			{
-				const int32 Price = C->GetAgreedPrice();
-				Check(TEXT("customer queued at the register holding something"), C->GetCarried() != ETSSProduct::None && Price > 0);
-				Check(TEXT("register prompt offers to ring up"), Reg->GetPrompt(nullptr, FHitResult()).Contains(TEXT("[E] Ring up")));
-				Reg->Interact(nullptr, FHitResult());
-				Check(TEXT("ringing up pays the agreed price"), Store->GetMoney() == St->Money0 + Price);
-				Check(TEXT("served counter went up"), Store->GetServed() == St->Served0 + 1);
+		auto Fail = [&](const TCHAR* What) { Check(What, false); St->Run = 99; };
 
-				// Phase 1: make everything absurdly expensive.
-				for (int32 i = 1; i < static_cast<int32>(ETSSProduct::Count); ++i)
-				{
-					const ETSSProduct P = static_cast<ETSSProduct>(i);
-					St->OldPrices.Add(P, Store->GetPrice(P));
-					Store->SetPrice(P, 90000);
-				}
-				St->Phase = 1; St->Elapsed = 0.f;
-				St->Lost0 = Store->GetLost();
-				St->Customer = CS->SpawnCustomer(8.f);
-			}
-			else if (bTimeout)
+		if (St->Run == 0 || St->Run == 1)
+		{
+			const bool bCash = St->Run == 0;
+			switch (St->Step)
 			{
-				Check(TEXT("customer reached the register in time"), false);
-				St->Phase = 2;
+			case 0: // customer reaches the counter and puts the basket down
+				if (Reg->GetPhase() != ETSSCheckoutPhase::Scanning) { if (bTimeout) Fail(TEXT("customer reached the counter with a basket")); return; }
+				{
+					const TArray<TObjectPtr<ATSSProductItem>>& Items = Reg->GetItems();
+					Check(TEXT("the basket is on the counter as real product items"), Items.Num() >= 1);
+					St->ExpectedSub = 0;
+					for (ATSSProductItem* I : Items) St->ExpectedSub += I->UnitPrice;
+
+					Reg->GetKeyboard()->Interact(Me, FHitResult());
+					Check(TEXT("charging is refused while items are unscanned"), Reg->GetPhase() == ETSSCheckoutPhase::Scanning);
+
+					for (ATSSProductItem* I : Items)
+					{
+						I->Interact(Me, FHitResult());
+						Check(TEXT("picking up an item puts it in the player's hands"), Me->GetHeldItem() == I && Me->GetHeld() == I->Product);
+						Check(TEXT("scanning the held item works"), Reg->TryScanHeld(Me) && I->bScanned && Me->GetHeld() == ETSSProduct::None);
+						FString Why;
+						Check(TEXT("the same box cannot be scanned twice"), !Reg->ScanItem(I, Why));
+						I->Interact(Me, FHitResult());
+						Check(TEXT("a scanned box cannot be picked up again"), Me->GetHeld() == ETSSProduct::None);
+					}
+					Check(TEXT("subtotal is the sum of the shelf prices"), Reg->GetSubtotal() == St->ExpectedSub);
+					Check(TEXT("tax is 8% and total = subtotal + tax"), Reg->GetTax() == TSSMoney::TaxFor(St->ExpectedSub) && Reg->GetTotal() == St->ExpectedSub + Reg->GetTax());
+					Check(TEXT("monitor lines add up to the subtotal"), [&]() { int32 S = 0; for (const FTSSSaleLine& L : Reg->GetLines()) S += L.Total(); return S == Reg->GetSubtotal(); }());
+					St->ExpectedTotal = Reg->GetTotal();
+					Snap(FVector(110.f, -85.f, 0.f), FVector(17.f, -85.f, 125.f));
+					St->Hold = 1.4f;
+					St->Step = 1; St->Elapsed = 0.f;
+				}
+				break;
+			case 1: // charge
+				Reg->GetKeyboard()->Interact(Me, FHitResult());
+				Check(TEXT("keyboard Charge moves the sale to awaiting payment"), Reg->GetPhase() == ETSSCheckoutPhase::WaitingForPayment);
+				St->Step = 2; St->Elapsed = 0.f;
+				break;
+			case 2: // the customer pays
+				if (bCash)
+				{
+					if (Reg->GetPhase() != ETSSCheckoutPhase::CashDue || !Reg->GetDrawer()->IsOpen()) { if (bTimeout) Fail(TEXT("customer paid cash and the drawer opened")); return; }
+					Check(TEXT("customer chose cash"), Reg->GetMethod() == ETSSPayMethod::Cash);
+					Check(TEXT("change due = cash received - total"), Reg->GetChangeDue() == Reg->GetCashReceived() - Reg->GetTotal() && Reg->GetChangeDue() >= 0);
+					if (Reg->GetChangeDue() > 0)
+					{
+						Reg->GetKeyboard()->Interact(Me, FHitResult());
+						Check(TEXT("confirming with no change given is rejected"), Reg->GetPhase() == ETSSCheckoutPhase::CashDue);
+					}
+					int32 Left = Reg->GetChangeDue();
+					for (int32 d = TSSMoney::NumDenoms - 1; d >= 0; --d)
+					{
+						while (Left >= TSSMoney::Denoms[d]) { Reg->GetDrawer()->ClickDenom(TSSMoney::Denoms[d]); Left -= TSSMoney::Denoms[d]; }
+					}
+					Check(TEXT("bills clicked out of the drawer add up to the change due"), Reg->GetChangeGiven() == Reg->GetChangeDue());
+					Snap(FVector(115.f, -85.f, 0.f), FVector(54.f, -85.f, 90.f));
+					St->Hold = 1.4f;
+					St->Step = 3; St->Elapsed = 0.f;
+				}
+				else
+				{
+					if (Reg->GetPhase() != ETSSCheckoutPhase::CardReady) { if (bTimeout) Fail(TEXT("customer tapped a card and the terminal is ready")); return; }
+					Check(TEXT("customer chose card"), Reg->GetMethod() == ETSSPayMethod::Card);
+					Snap(FVector(100.f, 55.f, 0.f), FVector(2.f, 55.f, 118.f));
+					St->Hold = 1.4f;
+					St->Step = 3; St->Elapsed = 0.f;
+				}
+				break;
+			case 3: // finish paying
+				if (bCash)
+				{
+					Reg->GetKeyboard()->Interact(Me, FHitResult());
+				}
+				else
+				{
+					Reg->GetTerminal()->Interact(Me, FHitResult());
+					Check(TEXT("pressing the terminal starts processing"), Reg->GetPhase() == ETSSCheckoutPhase::CardProcessing);
+				}
+				St->Step = 4; St->Elapsed = 0.f;
+				break;
+			case 4: // sale recorded, receipt printed
+				if (Reg->GetPhase() != ETSSCheckoutPhase::Receipt) { if (bTimeout) Fail(TEXT("payment completed and a receipt printed")); return; }
+				Check(TEXT("the store's money went up by exactly the total"), Store->GetMoney() == St->Money0 + St->ExpectedTotal);
+				Check(TEXT("served counter and transaction log updated"), Store->GetServed() == St->Served0 + 1 && Store->GetTransactions().Num() == St->Txns0 + 1);
+				Check(TEXT("sale recorded under the right payment method"),
+					bCash ? (Store->GetCashSales() == St->Cash0 + St->ExpectedTotal && Store->GetCardSales() == St->Card0)
+					      : (Store->GetCardSales() == St->Card0 + St->ExpectedTotal && Store->GetCashSales() == St->Cash0));
+				Check(TEXT("tax collected is recorded"), Store->GetTaxCollected() == St->Tax0 + TSSMoney::TaxFor(St->ExpectedSub));
+				Check(TEXT("the receipt printer has a receipt"), Reg->GetPrinter()->HasReceipt());
+				St->Hold = 2.0f; // let the receipt finish printing
+				St->Step = 5; St->Elapsed = 0.f;
+				break;
+			case 5: // hand over the receipt; customer leaves
+				Reg->GetPrinter()->Interact(Me, FHitResult());
+				Check(TEXT("handing over the receipt frees the register"), Reg->GetPhase() == ETSSCheckoutPhase::Idle);
+				St->Step = 6; St->Elapsed = 0.f;
+				break;
+			case 6:
+				if (St->Customer.IsValid()) { if (bTimeout) Fail(TEXT("the customer left the shop")); return; }
+				Check(TEXT("the customer walked out and is gone"), true);
+				++St->Run;
+				if (St->Run == 1) Spawn(ETSSPayMethod::Card);
+				else
+				{
+					// Run 2: absurd prices, the customer should balk and never reach the counter.
+					for (int32 i = 1; i < static_cast<int32>(ETSSProduct::Count); ++i)
+					{
+						const ETSSProduct P = static_cast<ETSSProduct>(i);
+						St->OldPrices.Add(P, Store->GetPrice(P));
+						Store->SetPrice(P, 90000);
+					}
+					Spawn(ETSSPayMethod::None);
+				}
+				break;
 			}
 		}
-		else if (St->Phase == 1)
+		else if (St->Run == 2)
 		{
 			if (Store->GetLost() > St->Lost0)
 			{
 				Check(TEXT("an overpriced shop loses the customer"), true);
 				for (const TPair<ETSSProduct, int32>& KV : St->OldPrices) Store->SetPrice(KV.Key, KV.Value);
-				St->Phase = 2;
+				St->Run = 99;
 			}
-			else if (bTimeout)
-			{
-				Check(TEXT("an overpriced shop loses the customer"), false);
-				St->Phase = 2;
-			}
+			else if (bTimeout) { Check(TEXT("an overpriced shop loses the customer"), false); St->Run = 99; }
 		}
-		if (St->Phase == 2)
+
+		if (St->Run == 99)
 		{
 			UE_LOG(LogTemp, Display, TEXT("TSSTEST CUSTOMERS DONE fails=%d"), St->Fails);
 			GetWorldTimerManager().ClearTimer(*Handle);

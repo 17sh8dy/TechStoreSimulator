@@ -4,6 +4,7 @@
 #include "TSSInteractable.h"
 #include "TSSProducts.h"
 #include "TSSShelf.h"
+#include "TSSCheckoutTypes.h"
 #include "TSSCustomer.generated.h"
 
 class ATSSRegister;
@@ -17,13 +18,14 @@ enum class ETSSCustomerState : uint8
 	Entering,   // walking in and over to the shelf they picked
 	Looking,    // stood at the shelf, deciding
 	Queueing,   // heading for / standing in the checkout line
+	AtCounter,  // at the front: items are on the counter and the sale is being rung up
 	Leaving,    // walking out; destroys itself at the door
 };
 
 /**
- * A shopper. Picks a stocked shelf slot, looks at it, buys one if the price is fair, queues at the register
- * and waits for the owner to ring them up. Too expensive, out of stock, or kept waiting too long = they leave.
- * Looking at them and pressing E rings them up too.
+ * A shopper. Picks a stocked shelf slot, looks at it, takes 1-3 items if the price is fair, queues at the register,
+ * puts the basket on the counter, and pays (cash or card) once the owner has scanned and charged it.
+ * Too expensive, out of stock, or kept waiting in line too long = they leave.
  */
 UCLASS()
 class ATSSCustomer : public ATSSInteractable
@@ -40,13 +42,22 @@ public:
 	/** Called by the spawner right after spawning. SpeedScale > 1 hurries walking and browsing (tests). */
 	void Begin(ATSSRegister* InRegister, float SpeedScale = 1.f);
 
+	/** At the front of the line and standing at their spot. */
 	bool IsReadyToPay() const;
-	/** Called by the register: pays the agreed price and heads out. */
-	void CompleteSale();
+
+	// ---- the register talks to the customer during a sale -----------------------------------------
+	/** The owner has charged them: after a moment they pay (bForceCash after a declined card). */
+	void PayNow(bool bForceCash);
+	/** Receipt handed over: collect the shopping and leave. */
+	void FinishCheckout();
+	/** An annoyed remark (wrong change, declined card). */
+	void Complain(const FString& Text) { Say(Text, 3.f); }
+	void Say(const FString& Text, float Seconds = 2.5f);
 
 	ETSSCustomerState GetState() const { return State; }
-	ETSSProduct GetCarried() const { return Carried; }
-	int32 GetAgreedPrice() const { return AgreedPrice; }
+	const TArray<FTSSBasketItem>& GetBasket() const { return Basket; }
+	/** Tests: make this customer always pay this way (None = random). */
+	ETSSPayMethod ForceMethod = ETSSPayMethod::None;
 
 	/** cm per second. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) float WalkSpeed = 140.f;
@@ -54,7 +65,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) float Patience = 45.f;
 
 private:
-	void Say(const FString& Text, float Seconds = 2.5f);
+	void StartCheckout();
+	void DecidePayment();
 	void StartPath(const TArray<FVector>& Points);
 	/** Walks the current path; true once the last point is reached. */
 	bool FollowPath(float Dt);
@@ -78,8 +90,10 @@ private:
 
 	FTSSStockRef Wanted;
 	ETSSProduct WantedProduct = ETSSProduct::None;
-	ETSSProduct Carried = ETSSProduct::None;
-	int32 AgreedPrice = 0;
+	TArray<FTSSBasketItem> Basket;
+	float PayTimer = 0.f;
+	bool bPaying = false;
+	bool bForceCash = false;
 	/** How much over the going rate this person will pay (a multiple of wholesale). */
 	float MaxMarkup = 1.8f;
 

@@ -85,6 +85,7 @@ void ATSSCharacter::ApplyView()
 void ATSSCharacter::SetHeld(ETSSProduct Product)
 {
 	Held = Product;
+	if (Product == ETSSProduct::None) HeldItem = nullptr;
 	if (Product == ETSSProduct::None)
 	{
 		HeldMesh->SetVisibility(false);
