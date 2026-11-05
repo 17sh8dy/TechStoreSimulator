@@ -8,6 +8,9 @@
 #include "TSSCrate.h"
 #include "TSSShelf.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSCustomer.h"
+#include "TSSCustomerSubsystem.h"
+#include "TSSRegister.h"
 
 void ATSSPlayerController::BeginPlay()
 {
@@ -48,7 +51,7 @@ void ATSSPlayerController::BeginPlay()
 			// 3: the wholesale crates.
 			Shot(4.5f, TEXT("TSSLook -100 150 110 90 -18"));
 			Shot(5.5f, TEXT("Shot ShowUI"));
-			Shot(7.0f, TEXT("QUIT_EDITOR"));
+			Shot(6.5f, TEXT("TSSCustomerTest"));
 		}, 1.5f, false);
 	}
 }
@@ -56,6 +59,7 @@ void ATSSPlayerController::BeginPlay()
 void ATSSPlayerController::ShowMenu(bool bMainMenu)
 {
 	bGameActive = false;
+	if (UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>()) Store->SetSimPaused(true);
 	Menu->SetVisibility(ESlateVisibility::Visible);
 	Hud->SetVisibility(ESlateVisibility::Collapsed);
 	Menu->SetPage(bMainMenu ? ETSSMenuPage::Main : ETSSMenuPage::Pause);
@@ -71,6 +75,7 @@ void ATSSPlayerController::ShowMenu(bool bMainMenu)
 void ATSSPlayerController::EnterGameInput()
 {
 	bGameActive = true;
+	if (UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>()) Store->SetSimPaused(false);
 	Menu->SetVisibility(ESlateVisibility::Collapsed);
 	Hud->SetVisibility(ESlateVisibility::HitTestInvisible);
 	SetInputMode(FInputModeGameOnly());
@@ -196,4 +201,110 @@ void ATSSPlayerController::TSSSelfTest()
 		++Slot;
 	}
 	UE_LOG(LogTemp, Display, TEXT("TSSTEST DONE fails=%d"), Fails);
+}
+
+void ATSSPlayerController::TSSCustomer()
+{
+	if (UTSSCustomerSubsystem* CS = GetWorld()->GetSubsystem<UTSSCustomerSubsystem>()) CS->SpawnCustomer();
+}
+
+void ATSSPlayerController::TSSCustomerTest()
+{
+	struct FState
+	{
+		int32 Phase = 0; // 0 = a fair-priced customer should buy, 1 = an overpriced shop should lose one
+		TWeakObjectPtr<ATSSCustomer> Customer;
+		int32 Money0 = 0, Served0 = 0, Lost0 = 0;
+		float Elapsed = 0.f;
+		int32 Fails = 0;
+		bool bShot = false;
+		float ShotAt = 0.f;
+		TMap<ETSSProduct, int32> OldPrices;
+	};
+	TSharedRef<FState> St = MakeShared<FState>();
+
+	UTSSCustomerSubsystem* CS = GetWorld()->GetSubsystem<UTSSCustomerSubsystem>();
+	UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
+	ATSSRegister* Reg = nullptr;
+	for (TActorIterator<ATSSRegister> It(GetWorld()); It; ++It) { Reg = *It; break; }
+	auto Check = [St](const TCHAR* Name, bool bOk)
+	{
+		UE_LOG(LogTemp, Display, TEXT("TSSTEST %s %s"), bOk ? TEXT("PASS") : TEXT("FAIL"), Name);
+		if (!bOk) ++St->Fails;
+	};
+	Check(TEXT("customer subsystem, store and register exist"), CS && Store && Reg);
+	if (!(CS && Store && Reg)) return;
+	TSSStart();
+	CS->bAutoSpawn = false;
+
+	// Phase 0 starts now: fair prices, one customer, hurried 8x.
+	St->Money0 = Store->GetMoney(); St->Served0 = Store->GetServed(); St->Lost0 = Store->GetLost();
+	St->Customer = CS->SpawnCustomer(8.f);
+	Check(TEXT("a customer spawns at the door"), St->Customer.IsValid());
+	if (St->Customer.IsValid()) St->Customer->Patience = 120.f;
+
+	FTimerHandle* Handle = new FTimerHandle();
+	GetWorldTimerManager().SetTimer(*Handle, [this, St, CS, Store, Reg, Check, Handle]()
+	{
+		St->Elapsed += 0.2f;
+		const bool bTimeout = St->Elapsed > 40.f;
+		if (St->Phase == 0)
+		{
+			ATSSCustomer* C = St->Customer.Get();
+			if (C && C->IsReadyToPay() && !St->bShot)
+			{
+				// Frame the register for a screenshot, then ring up a second later.
+				St->bShot = true;
+				St->ShotAt = St->Elapsed;
+				ConsoleCommand(TEXT("TSSLook 600 -250 95 180 -6"));
+				FTimerHandle T;
+				GetWorldTimerManager().SetTimer(T, [this]() { ConsoleCommand(TEXT("Shot ShowUI")); }, 0.5f, false);
+			}
+			if (C && C->IsReadyToPay() && St->bShot && St->Elapsed - St->ShotAt > 1.2f)
+			{
+				const int32 Price = C->GetAgreedPrice();
+				Check(TEXT("customer queued at the register holding something"), C->GetCarried() != ETSSProduct::None && Price > 0);
+				Check(TEXT("register prompt offers to ring up"), Reg->GetPrompt(nullptr, FHitResult()).Contains(TEXT("[E] Ring up")));
+				Reg->Interact(nullptr, FHitResult());
+				Check(TEXT("ringing up pays the agreed price"), Store->GetMoney() == St->Money0 + Price);
+				Check(TEXT("served counter went up"), Store->GetServed() == St->Served0 + 1);
+
+				// Phase 1: make everything absurdly expensive.
+				for (int32 i = 1; i < static_cast<int32>(ETSSProduct::Count); ++i)
+				{
+					const ETSSProduct P = static_cast<ETSSProduct>(i);
+					St->OldPrices.Add(P, Store->GetPrice(P));
+					Store->SetPrice(P, 90000);
+				}
+				St->Phase = 1; St->Elapsed = 0.f;
+				St->Lost0 = Store->GetLost();
+				St->Customer = CS->SpawnCustomer(8.f);
+			}
+			else if (bTimeout)
+			{
+				Check(TEXT("customer reached the register in time"), false);
+				St->Phase = 2;
+			}
+		}
+		else if (St->Phase == 1)
+		{
+			if (Store->GetLost() > St->Lost0)
+			{
+				Check(TEXT("an overpriced shop loses the customer"), true);
+				for (const TPair<ETSSProduct, int32>& KV : St->OldPrices) Store->SetPrice(KV.Key, KV.Value);
+				St->Phase = 2;
+			}
+			else if (bTimeout)
+			{
+				Check(TEXT("an overpriced shop loses the customer"), false);
+				St->Phase = 2;
+			}
+		}
+		if (St->Phase == 2)
+		{
+			UE_LOG(LogTemp, Display, TEXT("TSSTEST CUSTOMERS DONE fails=%d"), St->Fails);
+			GetWorldTimerManager().ClearTimer(*Handle);
+			if (FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest"))) ConsoleCommand(TEXT("QUIT_EDITOR"));
+		}
+	}, 0.2f, true);
 }

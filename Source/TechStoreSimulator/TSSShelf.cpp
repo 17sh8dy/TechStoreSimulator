@@ -2,6 +2,7 @@
 #include "TSSCharacter.h"
 #include "TSSStoreSubsystem.h"
 #include "Components/StaticMeshComponent.h"
+#include "EngineUtils.h"
 
 namespace
 {
@@ -176,4 +177,48 @@ void ATSSShelf::Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Direc
 	if (Slot.Qty == 0) return;
 	UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
 	Store->SetPrice(Slot.Product, Store->GetPrice(Slot.Product) + Direction);
+}
+
+void ATSSShelf::CollectStock(UWorld* World, TArray<FTSSStockRef>& Out)
+{
+	for (TActorIterator<ATSSShelf> It(World); It; ++It)
+	{
+		for (int32 i = 0; i < It->Slots.Num(); ++i)
+		{
+			if (It->Slots[i].Qty > 0) Out.Add({ *It, i });
+		}
+	}
+}
+
+bool ATSSShelf::TakeOne(int32 Slot, ETSSProduct& OutProduct)
+{
+	FSlot& S = Slots[Slot];
+	if (S.Qty <= 0) return false;
+	OutProduct = S.Product;
+	--S.Qty;
+	if (S.Qty == 0) S.Product = ETSSProduct::None;
+	RefreshSlot(Slot);
+	return true;
+}
+
+bool ATSSShelf::PutBack(int32 Slot, ETSSProduct Product)
+{
+	FSlot& S = Slots[Slot];
+	if (S.Qty > 0 && S.Product != Product) return false;
+	if (S.Qty >= TSSProductDef(Product).SlotCapacity()) return false;
+	S.Product = Product;
+	++S.Qty;
+	RefreshSlot(Slot);
+	return true;
+}
+
+FVector ATSSShelf::GetStandPoint(int32 Slot) const
+{
+	const FVector O = SlotOrigin(Slot);
+	return GetActorTransform().TransformPosition(FVector(FrontEdge + 75.f, O.Y, 0.f));
+}
+
+FVector ATSSShelf::GetSlotWorldPos(int32 Slot) const
+{
+	return GetActorTransform().TransformPosition(SlotOrigin(Slot));
 }

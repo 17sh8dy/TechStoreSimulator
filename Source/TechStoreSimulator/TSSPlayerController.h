@@ -24,6 +24,10 @@ public:
 
 	/** Debug: skip the menu, run the buy/stock/take/price loop through the real interaction code and log TSSTEST lines. */
 	UFUNCTION(Exec) void TSSSelfTest();
+	/** Debug: send a customer through the door right now. */
+	UFUNCTION(Exec) void TSSCustomer();
+	/** Debug: run two customers through the real shop (one buys, one balks at the price) and log TSSTEST lines. */
+	UFUNCTION(Exec) void TSSCustomerTest();
 	/** Debug: put the player at X Y Z facing Yaw/Pitch (for screenshots). */
 	UFUNCTION(Exec) void TSSLook(float X, float Y, float Z, float Yaw, float Pitch);
 	/** Debug: leave the menu and play. */

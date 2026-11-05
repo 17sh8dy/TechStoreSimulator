@@ -3,7 +3,7 @@
 Run headless (from the project root):
   UnrealEditor-Cmd.exe TechStoreSimulator.uproject /Game/Maps/Store_Main -ExecutePythonScript="Scripts/build_store_map.py" -unattended -nosplash
 All units are cm. The shop is 1400 x 1000, door in the +X wall, shelves along the -X and -Y walls,
-wholesale crates along the +Y wall, a counter (and a register placeholder) by the door.
+wholesale crates along the +Y wall, a working checkout counter by the door.
 """
 import unreal
 
@@ -11,7 +11,7 @@ eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
 
 # ---- clear previous run + the old placeholder floor ------------------------------------------
-MINE = (unreal.TSSBlock, unreal.TSSShelf, unreal.TSSCrate, unreal.PointLight, unreal.PostProcessVolume)
+MINE = (unreal.TSSBlock, unreal.TSSShelf, unreal.TSSCrate, unreal.TSSRegister, unreal.TSSCustomer, unreal.PointLight, unreal.PostProcessVolume)
 for a in eas.get_all_level_actors():
     if isinstance(a, MINE):
         eas.destroy_actor(a)
@@ -103,9 +103,12 @@ for i, p in enumerate(products):
     c.set_actor_label("Crate_%d" % i)
     c.rebuild()
 
-# ---- counter + register placeholder near the door ---------------------------------------------
-block("Counter", (480, -250, 50), (70, 260, 100), (0.35, 0.25, 0.18, 1))
-block("Register", (480, -300, 112), (30, 35, 24), (0.1, 0.1, 0.12, 1))
+# ---- checkout counter near the door (customers queue on its -X side, you stand on the +X side) ----
+reg = eas.spawn_actor_from_class(unreal.TSSRegister, v(480, -250, 0), unreal.Rotator(0, 0, 0))
+reg.set_actor_label("Register")
+reg.set_editor_property("spawn_point", v(1500, 0, 0))
+reg.set_editor_property("door_point", v(760, 0, 0))
+reg.set_editor_property("hub_point", v(350, 0, 0))
 
 # ---- spawn point: just inside the door, looking into the shop ----------------------------------
 for a in eas.get_all_level_actors():

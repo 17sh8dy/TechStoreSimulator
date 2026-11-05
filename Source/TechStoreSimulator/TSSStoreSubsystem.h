@@ -23,9 +23,23 @@ public:
 	int32 GetPrice(ETSSProduct Product) const { return Prices[static_cast<int32>(Product)]; }
 	void SetPrice(ETSSProduct Product, int32 Price);
 
+	/** A customer paid at the register. */
+	void RecordSale(int32 Amount);
+	/** A customer left without buying (too expensive, out of stock, or tired of waiting). */
+	void RecordWalkout();
+	int32 GetServed() const { return Served; }
+	int32 GetLost() const { return Lost; }
+
+	/** True while a menu is up: customers freeze. Set by the player controller. */
+	bool IsSimPaused() const { return bSimPaused; }
+	void SetSimPaused(bool bPaused) { bSimPaused = bPaused; }
+
 	FTSSStoreChanged OnChanged;
 
 private:
 	int32 Money = 1000;
+	int32 Served = 0;
+	int32 Lost = 0;
+	bool bSimPaused = true;
 	int32 Prices[static_cast<int32>(ETSSProduct::Count)] = {};
 };

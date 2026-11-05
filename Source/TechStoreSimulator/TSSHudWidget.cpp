@@ -38,6 +38,14 @@ FText UTSSHudWidget::HeldText() const
 	return FText::FromString(FString::Printf(TEXT("Holding: %s"), TSSProductDef(Player->GetHeld()).Name));
 }
 
+FText UTSSHudWidget::SalesText() const
+{
+	const UWorld* World = GetWorld();
+	const UTSSStoreSubsystem* Store = World ? World->GetSubsystem<UTSSStoreSubsystem>() : nullptr;
+	return FText::FromString(FString::Printf(TEXT("Customers served: %d    Walked out: %d"),
+		Store ? Store->GetServed() : 0, Store ? Store->GetLost() : 0));
+}
+
 FText UTSSHudWidget::PromptText() const
 {
 	const ATSSCharacter* Player = GetPlayer();
@@ -76,6 +84,13 @@ TSharedRef<SWidget> UTSSHudWidget::RebuildWidget()
 					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 16))
 					.ColorAndOpacity(Muted)
 				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)
+				[
+					SNew(STextBlock)
+					.Text_UObject(this, &UTSSHudWidget::SalesText)
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
+					.ColorAndOpacity(Muted)
+				]
 			]
 		]
 		// Crosshair.
@@ -107,7 +122,7 @@ TSharedRef<SWidget> UTSSHudWidget::RebuildWidget()
 		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(0.f, 0.f, 0.f, 18.f)
 		[
 			SNew(STextBlock)
-			.Text(FText::FromString(TEXT("WASD move   |   Mouse look   |   E interact   |   Wheel / [ ] price   |   Esc menu")))
+			.Text(FText::FromString(TEXT("WASD move   |   Mouse look   |   E interact / ring up   |   Wheel / [ ] price   |   Esc menu")))
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
 			.ColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, 0.55f))
 		];

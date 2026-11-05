@@ -16,6 +16,7 @@ protected:
 private:
 	FText MoneyText() const;
 	FText HeldText() const;
+	FText SalesText() const;
 	FText PromptText() const;
 	EVisibility PromptVisibility() const;
 	class ATSSCharacter* GetPlayer() const;

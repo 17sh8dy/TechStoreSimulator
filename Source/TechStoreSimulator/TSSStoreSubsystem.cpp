@@ -29,3 +29,15 @@ void UTSSStoreSubsystem::SetPrice(ETSSProduct Product, int32 Price)
 	Prices[static_cast<int32>(Product)] = FMath::Clamp(Price, 1, 99999);
 	OnChanged.Broadcast();
 }
+
+void UTSSStoreSubsystem::RecordSale(int32 Amount)
+{
+	++Served;
+	Earn(Amount);
+}
+
+void UTSSStoreSubsystem::RecordWalkout()
+{
+	++Lost;
+	OnChanged.Broadcast();
+}
