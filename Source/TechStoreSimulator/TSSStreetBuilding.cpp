@@ -1,6 +1,7 @@
 #include "TSSStreetBuilding.h"
 #include "TSSProducts.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 ATSSStreetBuilding::ATSSStreetBuilding()
 {
@@ -18,6 +19,9 @@ void ATSSStreetBuilding::Rebuild()
 {
 	for (UActorComponent* C : Generated) if (C) C->DestroyComponent();
 	Generated.Reset();
+	Panes.Reset();
+	PaneAlwaysLit.Reset();
+	LitCount = 0;
 
 	static const FLinearColor SbWalls[] = {
 		FLinearColor(0.42f, 0.19f, 0.15f), FLinearColor(0.66f, 0.58f, 0.44f), FLinearColor(0.46f, 0.47f, 0.5f),
@@ -31,7 +35,7 @@ void ATSSStreetBuilding::Rebuild()
 	const FLinearColor Glass(0.46f, 0.62f, 0.72f);
 	const FLinearColor Trim(0.12f, 0.12f, 0.14f);
 
-	auto Add = [this](FVector Centre, FVector Size, const FLinearColor& Color, bool bCollide)
+	auto Add = [this](FVector Centre, FVector Size, const FLinearColor& Color, bool bCollide) -> UStaticMeshComponent*
 	{
 		UStaticMeshComponent* P = NewObject<UStaticMeshComponent>(this);
 		P->CreationMethod = EComponentCreationMethod::UserConstructionScript;
@@ -44,6 +48,12 @@ void ATSSStreetBuilding::Rebuild()
 		P->RegisterComponent();
 		TSSApplyColor(P, Color);
 		Generated.Add(P);
+		return P;
+	};
+	auto AddGlass = [this, &Add](FVector Centre, FVector Size, const FLinearColor& Color, bool bAlwaysLit)
+	{
+		Panes.Add(Add(Centre, Size, Color, false));
+		PaneAlwaysLit.Add(bAlwaysLit);
 	};
 
 	// Body (front face at x = 0), roof slab and a darker roof edge.
@@ -61,7 +71,7 @@ void ATSSStreetBuilding::Rebuild()
 		{
 			const float Y = -Width * 0.5f + Pitch * (C + 0.5f);
 			Add(FVector(1.f, Y, F * Storey + 170.f), FVector(3.f, 120.f, 150.f), Trim, false);
-			Add(FVector(2.f, Y, F * Storey + 170.f), FVector(3.f, 108.f, 138.f), Glass, false);
+			AddGlass(FVector(2.f, Y, F * Storey + 170.f), FVector(3.f, 108.f, 138.f), Glass, false);
 		}
 	}
 
@@ -70,9 +80,49 @@ void ATSSStreetBuilding::Rebuild()
 	{
 		const float Win = Width * 0.7f;
 		Add(FVector(1.f, 0.f, 135.f), FVector(3.f, Win + 12.f, 214.f), Trim, false);
-		Add(FVector(2.f, 0.f, 135.f), FVector(3.f, Win, 202.f), Glass, false);
+		AddGlass(FVector(2.f, 0.f, 135.f), FVector(3.f, Win, 202.f), Glass, true);
 		Add(FVector(3.f, Win * 0.5f - 50.f, 105.f), FVector(3.f, 8.f, 210.f), Trim, false); // door frame post
 		Add(FVector(0.f, 0.f, 262.f), FVector(8.f, Width, 40.f), Trim, false);               // sign band
 		Add(FVector(45.f, 0.f, 236.f), FVector(90.f, Width * 0.82f, 8.f), Awning, false);   // awning
+	}
+}
+
+// ---- night: lit windows ---------------------------------------------------------------------------------
+
+static UMaterialInstanceDynamic* SbNightWindow(int32 Variant)
+{
+	static TMap<int32, UMaterialInstanceDynamic*> Cache;
+	if (UMaterialInstanceDynamic** F = Cache.Find(Variant)) { if (*F && (*F)->IsValidLowLevel()) return *F; }
+	static const FLinearColor Warm[3] = { FLinearColor(1.f, 0.78f, 0.4f), FLinearColor(0.95f, 0.86f, 0.62f), FLinearColor(0.72f, 0.86f, 1.f) };
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/TSS/Materials/M_TSSEmissive.M_TSSEmissive"));
+	const bool bEmissive = Base != nullptr;
+	if (!Base) Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	if (!Base) return nullptr;
+	UMaterialInstanceDynamic* M = UMaterialInstanceDynamic::Create(Base, GetTransientPackage());
+	M->AddToRoot();
+	M->SetVectorParameterValue(TEXT("Color"), bEmissive ? Warm[Variant % 3] : Warm[Variant % 3] * 2.5f);   // fallback: just very bright
+	Cache.Add(Variant, M);
+	return M;
+}
+
+void ATSSStreetBuilding::SetNight(bool bNight)
+{
+	bNightNow = bNight;
+	LitCount = 0;
+	const FLinearColor Glass(0.46f, 0.62f, 0.72f);
+	for (int32 i = 0; i < Panes.Num(); ++i)
+	{
+		UStaticMeshComponent* P = Panes[i];
+		if (!P) continue;
+		const bool bLit = bNight && (PaneAlwaysLit[i] || ((i * 7 + FMath::Abs(Style) * 3) % 10) < 6);
+		if (bLit)
+		{
+			if (UMaterialInstanceDynamic* M = SbNightWindow((i + FMath::Abs(Style)) % 3)) P->SetMaterial(0, M);
+			++LitCount;
+		}
+		else
+		{
+			TSSApplyColor(P, Glass);
+		}
 	}
 }

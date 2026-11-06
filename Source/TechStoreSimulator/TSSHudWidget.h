@@ -19,6 +19,9 @@ private:
 	FText SalesText() const;
 	FText ClockText() const;
 	FText DayText() const;
+	FText LevelText() const;
+	FText XpText() const;
+	TOptional<float> LevelFraction() const;
 	FText PromptText() const;
 	EVisibility PromptVisibility() const;
 	class ATSSCharacter* GetPlayer() const;

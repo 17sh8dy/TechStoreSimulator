@@ -131,7 +131,12 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 		return;
 	}
 
-	GetCharacterMovement()->MaxWalkSpeed = PC->IsInputKeyDown(EKeys::LeftShift) ? 330.f : 210.f;   // hold Shift to hurry
+	FKey SprintKey = EKeys::LeftShift;
+	if (const UGameInstance* GI = GetGameInstance())
+	{
+		if (const UTSSSettingsSubsystem* Cfg = GI->GetSubsystem<UTSSSettingsSubsystem>()) SprintKey = Cfg->GetSprintKey();
+	}
+	GetCharacterMovement()->MaxWalkSpeed = SpeedFor(PC->IsInputKeyDown(SprintKey));   // hold the sprint key (Shift by default) to hurry
 	Human->SetSpeed(GetVelocity().Size2D());
 	UpdateFocus(PC);
 	if (Focus)

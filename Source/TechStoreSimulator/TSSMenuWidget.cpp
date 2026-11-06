@@ -218,6 +218,56 @@ TSharedRef<SWidget> UTSSMenuWidget::FovRow(const FString& Text, ETSSViewMode Mod
 		];
 }
 
+TSharedRef<SWidget> UTSSMenuWidget::SprintRow()
+{
+	return SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SBox).WidthOverride(210.f)[ MenuLabel(TEXT("Sprint key"), 15, true) ]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SBox).WidthOverride(300.f)
+			[
+				SNew(SButton)
+				.HAlign(HAlign_Center)
+				.ButtonColorAndOpacity(TAttribute<FSlateColor>::CreateLambda([this]()
+				{
+					const UTSSSettingsSubsystem* S = GetSettings();
+					return FSlateColor((S && S->IsAwaitingSprintKey()) ? MenuAccent : MenuIdle);
+				}))
+				.OnClicked(FOnClicked::CreateLambda([this]()
+				{
+					if (UTSSSettingsSubsystem* S = GetSettings()) S->BeginAwaitSprintKey();
+					return FReply::Handled();
+				}))
+				[
+					SNew(STextBlock)
+					.Text(TAttribute<FText>::CreateLambda([this]()
+					{
+						const UTSSSettingsSubsystem* S = GetSettings();
+						if (!S) return FText::GetEmpty();
+						return S->IsAwaitingSprintKey() ? FText::FromString(TEXT("Press a key...  (Esc cancels)")) : S->GetSprintKey().GetDisplayName();
+					}))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
+					.Justification(ETextJustify::Center)
+				]
+			]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16, 0, 0, 0)
+		[
+			SNew(SButton)
+			.OnClicked(FOnClicked::CreateLambda([this]()
+			{
+				if (UTSSSettingsSubsystem* S = GetSettings()) S->ResetSprintKey();
+				return FReply::Handled();
+			}))
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("Reset (Shift)"))).Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
+			]
+		];
+}
+
 // ---- pages ----
 
 TSharedRef<SWidget> UTSSMenuWidget::BuildMain()
@@ -261,6 +311,8 @@ TSharedRef<SWidget> UTSSMenuWidget::BuildSettings()
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 18, 0, 6)[ FovRow(TEXT("First Person FOV"), ETSSViewMode::FirstPerson) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)[ FovRow(TEXT("Third Person FOV"), ETSSViewMode::ThirdPerson) ]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 24, 0, 10)[ MenuLabel(TEXT("CONTROLS"), 18, true, MenuAccent) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)[ SprintRow() ]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 28, 0, 0)[ MenuButton(TEXT("BACK"), FOnClicked::CreateUObject(this, &UTSSMenuWidget::OnBack)) ];
 }
 

@@ -20,6 +20,10 @@ public:
 	ATSSStreetBuilding();
 	virtual void OnConstruction(const FTransform& Transform) override;
 
+	/** Night mode: a share of the windows (and the shopfront) glow warm. Day mode: plain glass. */
+	void SetNight(bool bNight);
+	int32 GetLitWindowCount() const { return LitCount; }
+
 	/** Rebuilds the parts (callable from editor scripts). */
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Building") void Rebuild();
 
@@ -36,4 +40,8 @@ public:
 private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
 	UPROPERTY(Transient) TArray<TObjectPtr<UActorComponent>> Generated;
+	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> Panes;   // every glass pane
+	TArray<bool> PaneAlwaysLit;                                           // shopfront panes glow all night
+	int32 LitCount = 0;
+	bool bNightNow = false;
 };

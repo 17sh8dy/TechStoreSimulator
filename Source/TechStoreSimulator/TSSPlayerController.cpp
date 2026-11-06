@@ -8,6 +8,7 @@
 #include "TSSShopDoor.h"
 #include "TSSRoad.h"
 #include "TSSDayNight.h"
+#include "TSSStreetBuilding.h"
 #include "TSSShelf.h"
 #include "TSSStoreSubsystem.h"
 #include "TSSCustomer.h"
@@ -68,7 +69,9 @@ void ATSSPlayerController::BeginPlay()
 			At(15.0f, TEXT("Shot ShowUI"));
 			At(15.4f, TEXT("TSSTime 12"));
 			At(16.4f, TEXT("Shot ShowUI"));
-			At(17.5f, TEXT("quit"));
+			At(17.2f, TEXT("TSSSettingsPage"));
+			At(18.2f, TEXT("Shot ShowUI"));
+			At(19.2f, TEXT("quit"));
 		}, 1.5f, false);
 	}
 
@@ -180,6 +183,27 @@ void ATSSPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	if (!Menu) return;
+
+	// While the Settings screen waits for a sprint key, the next key press is the new binding (Esc cancels).
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UTSSSettingsSubsystem* Cfg = GI->GetSubsystem<UTSSSettingsSubsystem>())
+		{
+			if (Cfg->IsAwaitingSprintKey())
+			{
+				if (WasInputKeyJustPressed(EKeys::Escape)) { Cfg->CancelAwaitSprintKey(); return; }
+				TArray<FKey> All;
+				EKeys::GetAllKeys(All);
+				for (const FKey& K : All)
+				{
+					if (K.IsGamepadKey() || K.IsTouch() || K.IsAxis1D() || K.IsAxis2D() || K.IsAxis3D() || K == EKeys::LeftMouseButton || K == EKeys::MouseScrollUp || K == EKeys::MouseScrollDown) continue;
+					if (K == EKeys::Tab || K == EKeys::W || K == EKeys::A || K == EKeys::S || K == EKeys::D || K == EKeys::E) continue;   // used for other things
+					if (WasInputKeyJustPressed(K)) { Cfg->SetSprintKey(K); break; }
+				}
+				return;
+			}
+		}
+	}
 
 	if (bDeskOpen)
 	{
@@ -314,10 +338,15 @@ void ATSSPlayerController::TSSSelfTest()
 		{
 			Clock->SetHour(17.75f);
 			Check(TEXT("setting the time works: 5:45 PM"), FMath::IsNearlyEqual(Clock->GetHour(), 17.75f, 0.01f));
+			auto LitWindows = [this]() { int32 N = 0; for (TActorIterator<ATSSStreetBuilding> It(GetWorld()); It; ++It) N += It->GetLitWindowCount(); return N; };
+			ATSSStoreShell* ShellActor = nullptr;
+			for (TActorIterator<ATSSStoreShell> It(GetWorld()); It; ++It) { ShellActor = *It; break; }
 			Clock->SetHour(12.f); DN->ApplyNow();
 			Check(TEXT("noon: the sun is bright and the street lamps are off"), DN->GetLightLux() > 5.f && !DN->IsNight() && (!Rd || !Rd->AreLampsOn()));
+			Check(TEXT("noon: no windows are lit and the shop sign light is off"), LitWindows() == 0 && (!ShellActor || !ShellActor->IsSignLightOn()));
 			Clock->SetHour(23.f); DN->ApplyNow();
 			Check(TEXT("11 PM: it is night, the light is only dim moonlight, the street lamps are on"), DN->IsNight() && DN->GetLightLux() < 1.f && (!Rd || Rd->AreLampsOn()));
+			Check(TEXT("11 PM: windows across the street are lit and the shop sign is floodlit"), LitWindows() > 0 && (!ShellActor || ShellActor->IsSignLightOn()));
 			Clock->SetHour(6.f); DN->ApplyNow();
 			Check(TEXT("sunrise at 6:00 is dimmer than noon but not dark"), DN->GetLightLux() < 8.f && DN->GetLightLux() > 1.f);
 			Clock->SetHour(Hour0); DN->ApplyNow();
@@ -326,12 +355,36 @@ void ATSSPlayerController::TSSSelfTest()
 			&& UTSSBusinessSubsystem::DayForSeconds(UTSSBusinessSubsystem::DayLengthSeconds * 16.f / 24.f + 1.f) == 2);
 	}
 
+	// ---- sprint ----
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UTSSSettingsSubsystem* Cfg = GI->GetSubsystem<UTSSSettingsSubsystem>())
+		{
+			const FKey Original = Cfg->GetSprintKey();
+			Cfg->SetSprintKey(EKeys::RightShift, false);
+			Check(TEXT("the sprint key can be rebound"), Cfg->GetSprintKey() == EKeys::RightShift);
+			Cfg->BeginAwaitSprintKey();
+			Check(TEXT("Settings waits for a key press when you click the sprint button"), Cfg->IsAwaitingSprintKey());
+			Cfg->CancelAwaitSprintKey();
+			Cfg->ResetSprintKey(false);
+			Check(TEXT("Reset puts the sprint key back to Shift"), Cfg->GetSprintKey() == EKeys::LeftShift);
+			Cfg->SetSprintKey(Original, false);   // session-only: the test never rewrites the player's saved settings
+		}
+	}
+	Check(TEXT("sprinting is clearly faster than walking"), ATSSCharacter::SpeedFor(true) >= ATSSCharacter::SpeedFor(false) * 1.8f);
+
 	UE_LOG(LogTemp, Display, TEXT("TSSTEST DONE fails=%d"), Fails);
 }
 
 void ATSSPlayerController::TSSTime(float Hour)
 {
 	if (UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz->SetHour(Hour);
+}
+
+void ATSSPlayerController::TSSSettingsPage()
+{
+	ShowMenu(true);
+	if (Menu) Menu->SetPage(ETSSMenuPage::Settings);
 }
 
 void ATSSPlayerController::TSSTruck()
@@ -394,7 +447,7 @@ void ATSSPlayerController::TSSCustomerTest()
 	for (TActorIterator<ATSSCustomer> CIt(GetWorld()); CIt; ++CIt) CIt->Destroy();
 	Reg->ReleaseSale();
 	Reg->CardDeclineChance = 0.f; // deterministic; the decline path has its own check below
-	if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>()) Cfg->SetViewMode(ETSSViewMode::FirstPerson);
+	if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>()) Cfg->SetViewMode(ETSSViewMode::FirstPerson, false);
 
 	auto Spawn = [this, St, CS, Store](ETSSPayMethod Method)
 	{

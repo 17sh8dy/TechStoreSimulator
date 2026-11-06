@@ -1,6 +1,8 @@
 #include "TSSDayNight.h"
 #include "TSSBusinessSubsystem.h"
 #include "TSSRoad.h"
+#include "TSSStreetBuilding.h"
+#include "TSSStoreShell.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/DirectionalLight.h"
@@ -93,5 +95,7 @@ void ATSSDayNight::Apply(float Hour)
 	{
 		LampState = bNight ? 1 : 0;
 		for (TActorIterator<ATSSRoad> It(GetWorld()); It; ++It) It->SetLampsOn(bNight);
+		for (TActorIterator<ATSSStreetBuilding> It(GetWorld()); It; ++It) It->SetNight(bNight);   // lit windows
+		for (TActorIterator<ATSSStoreShell> It(GetWorld()); It; ++It) It->SetNightLights(bNight);  // the sign light
 	}
 }

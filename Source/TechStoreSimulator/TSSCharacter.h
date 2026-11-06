@@ -29,6 +29,8 @@ public:
 	ETSSProduct GetHeld() const { return Held; }
 	/** For tests: true if anything is drawn in the player's hands that should not be (nothing held, but a box shows). */
 	bool IsStrayBoxDrawn() const;
+	/** Walking and sprinting speeds (cm/s). */
+	static float SpeedFor(bool bSprint) { return bSprint ? 400.f : 210.f; }
 	/** The specific customer item in the hands (checkout), if any. Cleared when the hands empty. */
 	ATSSProductItem* GetHeldItem() const { return HeldItem; }
 	void SetHeldItem(ATSSProductItem* Item) { HeldItem = Item; }

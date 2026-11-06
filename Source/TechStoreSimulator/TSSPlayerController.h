@@ -39,6 +39,8 @@ public:
 	UFUNCTION(Exec) void TSSCustomer();
 	/** Developer: sends an empty delivery truck down the road to the shop (no order, nothing delivered). */
 	UFUNCTION(Exec) void TSSTruck();
+	/** Developer: opens the Settings page (for screenshots). */
+	UFUNCTION(Exec) void TSSSettingsPage();
 	/** Developer: sets the in-game clock to this hour of the day, e.g. `TSSTime 21.5` for 9:30 PM. */
 	UFUNCTION(Exec) void TSSTime(float Hour);
 	/** Debug: run two customers through the real shop (one buys, one balks at the price) and log TSSTEST lines. */

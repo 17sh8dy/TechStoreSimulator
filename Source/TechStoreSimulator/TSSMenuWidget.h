@@ -42,6 +42,7 @@ private:
 	TSharedRef<SWidget> MenuButton(const FString& Label, FOnClicked OnClicked, float Width = 320.f);
 	TSharedRef<SWidget> ViewCard(ETSSViewMode Mode, const FString& Title, const FString& Body, bool bPendingChoice);
 	TSharedRef<SWidget> FovRow(const FString& Label, ETSSViewMode Mode);
+	TSharedRef<SWidget> SprintRow();
 
 	UTSSSettingsSubsystem* GetSettings() const;
 

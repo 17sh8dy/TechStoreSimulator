@@ -97,7 +97,8 @@ void UTSSBusinessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
 
 	// The automated test works on a throwaway slot, so it can never touch a real save.
-	const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest"));
+	// -TSSStreetShots (the screenshot helper) moves the clock around, so it must never touch a real save either.
+	const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest")) || FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots"));
 	SlotName = bTest ? TEXT("TSSAutoTest") : TEXT("TSSBusiness");
 	if (bTest) UGameplayStatics::DeleteGameInSlot(SlotName, 0);
 

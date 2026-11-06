@@ -29,12 +29,18 @@ public:
 	void ApplyStage(int32 Stage, bool bInitial);
 	int32 GetStage() const { return CurrentStage; }
 
+	/** Night lights: a floodlight on the "TECH STORE" sign over the door. */
+	void SetNightLights(bool bOn);
+	bool IsSignLightOn() const { return bSignLightOn; }
+
 private:
 	UStaticMeshComponent* Box(const TCHAR* Name, FLinearColor Color, bool bCollide = true);
 	void Layout(int32 Stage);
 	void OnBusinessChanged();
 
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
+	UPROPERTY() TObjectPtr<class UPointLightComponent> SignLight;
+	bool bSignLightOn = false;
 	TArray<FLinearColor> PartColors;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Floor;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Ceiling;

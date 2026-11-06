@@ -18,11 +18,11 @@ float UTSSSettingsSubsystem::GetFOV(ETSSViewMode Mode) const
 	return Mode == ETSSViewMode::FirstPerson ? Data->FirstPersonFOV : Data->ThirdPersonFOV;
 }
 
-void UTSSSettingsSubsystem::SetViewMode(ETSSViewMode Mode)
+void UTSSSettingsSubsystem::SetViewMode(ETSSViewMode Mode, bool bPersist)
 {
 	if (Data->ViewMode == Mode) return;
 	Data->ViewMode = Mode;
-	Save();
+	if (bPersist) Save();
 	OnChanged.Broadcast();
 }
 
@@ -33,6 +33,20 @@ void UTSSSettingsSubsystem::SetFOV(ETSSViewMode Mode, float FOV)
 	if (Slot == FOV) return;
 	Slot = FOV;
 	Save();
+	OnChanged.Broadcast();
+}
+
+FKey UTSSSettingsSubsystem::GetSprintKey() const
+{
+	return Data->SprintKey.IsValid() ? Data->SprintKey : FKey(FName(TEXT("LeftShift")));
+}
+
+void UTSSSettingsSubsystem::SetSprintKey(FKey Key, bool bPersist)
+{
+	bAwaitingSprint = false;
+	if (!Key.IsValid()) Key = FKey(FName(TEXT("LeftShift")));
+	Data->SprintKey = Key;
+	if (bPersist) Save();
 	OnChanged.Broadcast();
 }
 

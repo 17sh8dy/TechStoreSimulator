@@ -65,7 +65,7 @@ public:
 	float GetSimSeconds() const { return SimSeconds; }
 	bool IsPrestigeUnlocked() const { return GetLevel() >= PrestigeLevel; }
 	static constexpr int32 PrestigeLevel = 10;
-	static constexpr float DayLengthSeconds = 480.f;   // one in-game day (24 hours) lasts this many real seconds
+	static constexpr float DayLengthSeconds = 900.f;   // one in-game day (24 hours) lasts this many real seconds
 	/** The shop day starts at this hour on a new game. */
 	static constexpr float StartHour = 8.f;
 

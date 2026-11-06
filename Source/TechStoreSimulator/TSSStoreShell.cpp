@@ -42,6 +42,16 @@ ATSSStoreShell::ATSSStoreShell()
 	SignText->SetText(FText::FromString(TEXT("TECH STORE")));
 	SignText->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	SignLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("SignLight"));
+	SignLight->SetupAttachment(Root);
+	SignLight->SetMobility(EComponentMobility::Movable);
+	SignLight->SetIntensityUnits(ELightUnits::Lumens);
+	SignLight->SetIntensity(9000.f);
+	SignLight->SetAttenuationRadius(900.f);
+	SignLight->SetLightColor(FLinearColor(0.62f, 0.8f, 1.f));
+	SignLight->SetCastShadows(false);
+	SignLight->SetVisibility(false);
+
 	for (int32 i = 0; i < MaxLights; ++i)
 	{
 		const FString N = FString::FromInt(i);
@@ -130,6 +140,7 @@ void ATSSStoreShell::Layout(int32 Stage)
 	Skirting[3]->SetVisibility(false);
 	Place(SignBoard, FVector(FrontX + WallT + 3.f, 0.f, 285.f), FVector(6.f, 2.f * DoorHalfGap + 160.f, 50.f));
 	SignText->SetRelativeLocation(FVector(FrontX + WallT + 6.6f, 0.f, 285.f));
+	SignLight->SetRelativeLocation(FVector(FrontX + WallT + 90.f, 0.f, 330.f));
 	for (int32 i = 0; i < Posters.Num(); ++i)
 	{
 		const float Y = (i == 0 ? -1.f : 1.f) * Hw * 0.55f;
@@ -150,6 +161,12 @@ void ATSSStoreShell::Layout(int32 Stage)
 		Lights[i]->SetRelativeLocation(FVector(X, Y, WallH - 40.f));
 		Place(LightPanels[i], FVector(X, Y, WallH - 1.f), FVector(120.f, 60.f, 3.f));
 	}
+}
+
+void ATSSStoreShell::SetNightLights(bool bOn)
+{
+	bSignLightOn = bOn;
+	SignLight->SetVisibility(bOn);
 }
 
 void ATSSStoreShell::ApplyStage(int32 Stage, bool bInitial)

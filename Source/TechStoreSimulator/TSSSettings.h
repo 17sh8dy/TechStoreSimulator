@@ -25,6 +25,7 @@ public:
 	UPROPERTY() float FirstPersonFOV = 90.f;
 	UPROPERTY() float ThirdPersonFOV = 90.f;
 	UPROPERTY() bool bHasChosenView = false;
+	UPROPERTY() FKey SprintKey = FKey(FName(TEXT("LeftShift")));
 };
 
 DECLARE_MULTICAST_DELEGATE(FTSSSettingsChanged);
@@ -44,9 +45,20 @@ public:
 	/** FOV of whichever view is currently active. */
 	float GetActiveFOV() const { return GetFOV(Data->ViewMode); }
 
-	void SetViewMode(ETSSViewMode Mode);
+	/** bPersist = false changes the view for this session only (the self-test uses it so it never rewrites your settings). */
+	void SetViewMode(ETSSViewMode Mode, bool bPersist = true);
 	void SetFOV(ETSSViewMode Mode, float FOV);
 	void MarkViewChosen();
+
+	// ---- controls ----
+	FKey GetSprintKey() const;
+	/** bPersist = false keeps the change to this session (tests). */
+	void SetSprintKey(FKey Key, bool bPersist = true);
+	void ResetSprintKey(bool bPersist = true) { SetSprintKey(FKey(FName(TEXT("LeftShift"))), bPersist); }
+	/** True while the Settings screen is waiting for the next key press to use as the sprint key. */
+	bool IsAwaitingSprintKey() const { return bAwaitingSprint; }
+	void BeginAwaitSprintKey() { bAwaitingSprint = true; OnChanged.Broadcast(); }
+	void CancelAwaitSprintKey() { bAwaitingSprint = false; OnChanged.Broadcast(); }
 
 	FTSSSettingsChanged OnChanged;
 
@@ -54,6 +66,7 @@ private:
 	void Save();
 
 	UPROPERTY() TObjectPtr<UTSSSaveGame> Data;
+	bool bAwaitingSprint = false;
 
 	static const TCHAR* SlotName() { return TEXT("TSSSettings"); }
 };

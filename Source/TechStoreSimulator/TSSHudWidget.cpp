@@ -7,6 +7,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
+#include "Widgets/Notifications/SProgressBar.h"
 #include "Widgets/Text/STextBlock.h"
 
 namespace
@@ -52,6 +53,31 @@ FText UTSSHudWidget::ClockText() const
 	const UWorld* World = GetWorld();
 	const UTSSBusinessSubsystem* Biz = World ? World->GetSubsystem<UTSSBusinessSubsystem>() : nullptr;
 	return FText::FromString(Biz ? UTSSBusinessSubsystem::FormatClock(Biz->GetHour()) : FString(TEXT("--:--")));
+}
+
+FText UTSSHudWidget::LevelText() const
+{
+	const UWorld* World = GetWorld();
+	const UTSSBusinessSubsystem* Biz = World ? World->GetSubsystem<UTSSBusinessSubsystem>() : nullptr;
+	return FText::FromString(FString::Printf(TEXT("LEVEL %d"), Biz ? Biz->GetLevel() : 1));
+}
+
+TOptional<float> UTSSHudWidget::LevelFraction() const
+{
+	const UWorld* World = GetWorld();
+	const UTSSBusinessSubsystem* Biz = World ? World->GetSubsystem<UTSSBusinessSubsystem>() : nullptr;
+	if (!Biz) return 0.f;
+	const int32 L = Biz->GetLevel();
+	const int32 From = UTSSBusinessSubsystem::XPForLevel(L), To = UTSSBusinessSubsystem::XPForLevel(L + 1);
+	return To > From ? FMath::Clamp(static_cast<float>(Biz->GetXP() - From) / static_cast<float>(To - From), 0.f, 1.f) : 1.f;
+}
+
+FText UTSSHudWidget::XpText() const
+{
+	const UWorld* World = GetWorld();
+	const UTSSBusinessSubsystem* Biz = World ? World->GetSubsystem<UTSSBusinessSubsystem>() : nullptr;
+	if (!Biz) return FText::GetEmpty();
+	return FText::FromString(FString::Printf(TEXT("%d / %d XP"), Biz->GetXP(), UTSSBusinessSubsystem::XPForLevel(Biz->GetLevel() + 1)));
 }
 
 FText UTSSHudWidget::DayText() const
@@ -104,6 +130,34 @@ TSharedRef<SWidget> UTSSHudWidget::RebuildWidget()
 					SNew(STextBlock)
 					.Text_UObject(this, &UTSSHudWidget::SalesText)
 					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
+					.ColorAndOpacity(HudMuted)
+				]
+				// Level and a progress bar to the next level.
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 10.f, 0.f, 0.f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(STextBlock)
+						.Text_UObject(this, &UTSSHudWidget::LevelText)
+						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
+						.ColorAndOpacity(HudAccent)
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(12.f, 0.f, 0.f, 0.f)
+					[
+						SNew(SBox).HeightOverride(10.f).MinDesiredWidth(150.f)
+						[
+							SNew(SProgressBar)
+							.Percent_UObject(this, &UTSSHudWidget::LevelFraction)
+							.FillColorAndOpacity(HudAccent)
+						]
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f).HAlign(HAlign_Right)
+				[
+					SNew(STextBlock)
+					.Text_UObject(this, &UTSSHudWidget::XpText)
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 12))
 					.ColorAndOpacity(HudMuted)
 				]
 			]
