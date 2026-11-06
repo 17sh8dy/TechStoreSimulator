@@ -295,6 +295,10 @@ void ATSSPlayerController::TSSCustomerTest()
 
 	TSSStart();
 	CS->bAutoSpawn = false;
+	// The earlier test stages leave a customer wandering the shop; it would join the queue and put a
+	// second basket on the counter during our runs. Start from an empty shop and a free register.
+	for (TActorIterator<ATSSCustomer> CIt(GetWorld()); CIt; ++CIt) CIt->Destroy();
+	Reg->ReleaseSale();
 	Reg->CardDeclineChance = 0.f; // deterministic; the decline path has its own check below
 	if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>()) Cfg->SetViewMode(ETSSViewMode::FirstPerson);
 
@@ -434,6 +438,7 @@ void ATSSPlayerController::TSSCustomerTest()
 				if (St->Customer.IsValid()) { if (St->Elapsed > 90.f) Fail(TEXT("the customer left the shop")); return; }
 				Check(TEXT("the customer walked out and is gone"), true);
 				UE_LOG(LogTemp, Display, TEXT("TSS debug: phase=%d items=%d"), static_cast<int32>(Reg->GetPhase()), Reg->GetItems().Num());
+				for (TActorIterator<ATSSCustomer> CIt(GetWorld()); CIt; ++CIt) UE_LOG(LogTemp, Display, TEXT("TSS debug customer %s state=%d at %s tracked=%d"), *CIt->GetName(), static_cast<int32>(CIt->GetState()), *CIt->GetActorLocation().ToString(), St->Customer.Get() == *CIt);
 				for (ATSSProductItem* It : Reg->GetItems()) UE_LOG(LogTemp, Display, TEXT("TSS debug item %s at %s scanned=%d held=%d"), *GetNameSafe(It), *It->GetActorLocation().ToString(), It->bScanned, Me->GetHeldItem()==It);
 				Check(TEXT("the counter was cleared and the register is free for the next sale"), Reg->GetPhase() == ETSSCheckoutPhase::Idle && Reg->GetItems().Num() == 0);
 				++St->Run;
