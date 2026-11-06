@@ -57,18 +57,14 @@ void UTSSHumanComponent::Build(int32 Identity, const FString& Top, const FString
 	bBuilt = true;
 	Identity = FMath::Clamp(Identity, 1, 2);
 
-	IdleAnim = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("%sAnims/Loco/MTN_N_Idle.MTN_N_Idle"), Kit));
-	WalkAnim = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("%sAnims/Loco/MTN_N_Walk_InPlace.MTN_N_Walk_InPlace"), Kit));
-
 	// The leader is the bare skeleton: it plays the animation, everything else copies its pose.
 	Leader = AddPiece(*MeshPath(TEXT("base")), false);
 	if (!Leader) return;
 	Leader->SetVisibility(false);
 	Leader->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
-	Leader->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-	if (IdleAnim) Leader->PlayAnimation(IdleAnim, true);
-	// Desynchronise a crowd so everybody does not breathe in time.
-	Leader->SetPosition(FMath::FRandRange(0.f, 5.f));
+	// No Animation Blueprint: UTSSHumanAnimInstance builds the pose (locomotion blend plus arm / head IK) in code.
+	Leader->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	Leader->SetAnimInstanceClass(UTSSHumanAnimInstance::StaticClass());
 
 	AddPiece(*MeshPath(TEXT("body")), true);
 	AddPiece(*MeshPath(Top), true);
@@ -104,14 +100,46 @@ void UTSSHumanComponent::Build(int32 Identity, const FString& Top, const FString
 	}
 }
 
-void UTSSHumanComponent::SetWalking(bool bWalking)
+UTSSHumanAnimInstance* UTSSHumanComponent::AnimInst() const
 {
-	if (!Leader || bWalking == bWalkingNow) return;
-	bWalkingNow = bWalking;
-	if (UAnimSequence* Anim = bWalking ? WalkAnim.Get() : IdleAnim.Get())
-	{
-		Leader->PlayAnimation(Anim, true);
-	}
+	return Leader ? Cast<UTSSHumanAnimInstance>(Leader->GetAnimInstance()) : nullptr;
+}
+
+void UTSSHumanComponent::SetSpeed(float CmPerSecond)
+{
+	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetSpeed(CmPerSecond);
+}
+
+void UTSSHumanComponent::Reach(ETSSHand Hand, const FVector& WorldTarget, float BlendSeconds)
+{
+	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetReach(Hand, true, WorldTarget, BlendSeconds);
+}
+
+void UTSSHumanComponent::Relax(ETSSHand Hand, float BlendSeconds)
+{
+	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetReach(Hand, false, FVector::ZeroVector, BlendSeconds);
+}
+
+float UTSSHumanComponent::ReachAlpha(ETSSHand Hand) const
+{
+	const UTSSHumanAnimInstance* A = AnimInst();
+	return A ? A->GetReachAlpha(Hand) : 0.f;
+}
+
+void UTSSHumanComponent::LookAt(const FVector& WorldTarget)
+{
+	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetLook(true, WorldTarget);
+}
+
+void UTSSHumanComponent::StopLooking()
+{
+	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetLook(false, FVector::ZeroVector);
+}
+
+FVector UTSSHumanComponent::GetHandWorldLocation(ETSSHand Hand) const
+{
+	if (Leader) return Leader->GetSocketLocation(Hand == ETSSHand::Right ? TEXT("hand_r") : TEXT("hand_l"));
+	return GetComponentLocation();
 }
 
 void UTSSHumanComponent::SetHiddenFromOwner(bool bHidden)

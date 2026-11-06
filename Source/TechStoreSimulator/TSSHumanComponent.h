@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/SceneComponent.h"
+#include "TSSHumanAnimInstance.h"
 #include "TSSHumanComponent.generated.h"
 
 class USkeletalMeshComponent;
@@ -20,8 +21,24 @@ class UTSSHumanComponent : public USceneComponent
 public:
 	/** Identity 1 or 2 (face + hair + beard); Top/Bottom/Shoes are suffixes of the m_tal_nrw_* clothing meshes. */
 	void Build(int32 Identity, const FString& Top, const FString& Bottom, const FString& Shoes);
-	/** Idle or walk cycle. Cheap to call every frame. */
-	void SetWalking(bool bWalking);
+	/** Ground speed in cm/s: 0 stands, ~140 walks, ~240+ moves with the quick-walk clip. Cheap to call every frame. */
+	void SetSpeed(float CmPerSecond);
+	void SetWalking(bool bWalking) { SetSpeed(bWalking ? 140.f : 0.f); }
+
+	// ---- hands and head ---------------------------------------------------------------------------------------------------
+	/** Bring a hand to a world-space point (it eases in over BlendSeconds). */
+	void Reach(ETSSHand Hand, const FVector& WorldTarget, float BlendSeconds = 0.35f);
+	/** Let the arm return to the animation. */
+	void Relax(ETSSHand Hand, float BlendSeconds = 0.35f);
+	/** 0..1: how far the hand has got to its target. */
+	float ReachAlpha(ETSSHand Hand) const;
+	bool IsReachSettled(ETSSHand Hand, float Threshold = 0.9f) const { return ReachAlpha(Hand) >= Threshold; }
+	bool IsRelaxed(ETSSHand Hand) const { return ReachAlpha(Hand) <= 0.05f; }
+	void LookAt(const FVector& WorldTarget);
+	void StopLooking();
+	/** Where the hand actually is right now (a held product follows this). */
+	FVector GetHandWorldLocation(ETSSHand Hand) const;
+	bool IsBuilt() const { return bBuilt && Leader != nullptr; }
 	/** Show or hide the whole person (the invisible leader skeleton stays hidden either way). */
 	void SetShown(bool bShown);
 	/** True hides the whole person from their own camera (first person). */
@@ -37,8 +54,6 @@ private:
 
 	UPROPERTY() TObjectPtr<USkeletalMeshComponent> Leader;
 	UPROPERTY() TArray<TObjectPtr<UPrimitiveComponent>> Pieces;
-	UPROPERTY() TObjectPtr<UAnimSequence> IdleAnim;
-	UPROPERTY() TObjectPtr<UAnimSequence> WalkAnim;
-	bool bWalkingNow = false;
+	UTSSHumanAnimInstance* AnimInst() const;
 	bool bBuilt = false;
 };

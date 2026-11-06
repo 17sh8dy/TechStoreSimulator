@@ -3,6 +3,7 @@
 #include "TSSSettings.h"
 #include "TSSInteractable.h"
 #include "TSSHumanComponent.h"
+#include "TSSProductBox.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -16,7 +17,7 @@ ATSSCharacter::ATSSCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	GetCapsuleComponent()->InitCapsuleSize(34.f, 88.f);
-	GetCharacterMovement()->MaxWalkSpeed = 450.f;
+	GetCharacterMovement()->MaxWalkSpeed = 210.f;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 540.f, 0.f);
 	bUseControllerRotationYaw = false;
 
@@ -36,11 +37,10 @@ ATSSCharacter::ATSSCharacter()
 	Human->SetupAttachment(GetCapsuleComponent());
 	Human->SetRelativeLocation(FVector(0.f, 0.f, -88.f));
 	Human->SetRelativeRotation(FRotator(0.f, -90.f, 0.f)); // the kit's meshes face +Y
-	HeldMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldMesh"));
+	HeldMesh = CreateDefaultSubobject<UTSSProductBoxComponent>(TEXT("HeldMesh"));
 	HeldMesh->SetupAttachment(GetCapsuleComponent());
-	HeldMesh->SetStaticMesh(Cube.Object);
 	HeldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	HeldMesh->SetVisibility(false);
+	HeldMesh->SetVisibility(false, true);
 }
 
 void ATSSCharacter::BeginPlay()
@@ -72,6 +72,7 @@ void ATSSCharacter::ApplyView()
 	if (!Settings) return;
 
 	const bool bFirstPerson = Settings->GetViewMode() == ETSSViewMode::FirstPerson;
+	bFirstPersonView = bFirstPerson;
 	SpringArm->TargetArmLength = bFirstPerson ? 0.f : 320.f;
 	SpringArm->SocketOffset = bFirstPerson ? FVector::ZeroVector : FVector(0.f, 0.f, 40.f);
 	SpringArm->bDoCollisionTest = !bFirstPerson;
@@ -88,15 +89,14 @@ void ATSSCharacter::SetHeld(ETSSProduct Product)
 	if (Product == ETSSProduct::None) HeldItem = nullptr;
 	if (Product == ETSSProduct::None)
 	{
-		HeldMesh->SetVisibility(false);
+		HeldMesh->SetVisibility(false, true);
 		return;
 	}
 	const FTSSProductDef& Def = TSSProductDef(Product);
-	HeldMesh->SetRelativeScale3D(Def.BoxSize / 100.f);
+	HeldMesh->SetProduct(Product);
 	// In front of the chest, a little to the right and low, so it reads in first person too.
 	HeldMesh->SetRelativeLocation(FVector(46.f, 18.f, 42.f - Def.BoxSize.Z * 0.5f));
-	TSSApplyColor(HeldMesh, Def.Color);
-	HeldMesh->SetVisibility(true);
+	HeldMesh->SetVisibility(true, true);
 }
 
 void ATSSCharacter::UpdateFocus(ATSSPlayerController* PC)
@@ -122,14 +122,23 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 	{
 		Focus = nullptr;
 		FocusPrompt.Reset();
+		Human->SetSpeed(0.f);
 		return;
 	}
 
-	Human->SetWalking(GetVelocity().SizeSquared2D() > 400.f);
+	GetCharacterMovement()->MaxWalkSpeed = PC->IsInputKeyDown(EKeys::LeftShift) ? 330.f : 210.f;   // hold Shift to hurry
+	Human->SetSpeed(GetVelocity().Size2D());
 	UpdateFocus(PC);
 	if (Focus)
 	{
-		if (PC->WasInputKeyJustPressed(EKeys::E)) Focus->Interact(this, FocusHit);
+		if (PC->WasInputKeyJustPressed(EKeys::E))
+		{
+			Focus->Interact(this, FocusHit);
+			// A quick reach toward what you pressed it on (visible in third person).
+			Human->Reach(ETSSHand::Right, FocusHit.ImpactPoint, 0.16f);
+			Human->LookAt(FocusHit.ImpactPoint);
+			GestureTimer = 0.55f;
+		}
 		if (PC->WasInputKeyJustPressed(EKeys::MouseScrollUp) || PC->WasInputKeyJustPressed(EKeys::RightBracket)) Focus->Adjust(this, FocusHit, +1);
 		if (PC->WasInputKeyJustPressed(EKeys::MouseScrollDown) || PC->WasInputKeyJustPressed(EKeys::LeftBracket)) Focus->Adjust(this, FocusHit, -1);
 	}
@@ -148,4 +157,29 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 	AddMovementInput(Right, Strafe);
 
 	if (PC->WasInputKeyJustPressed(EKeys::SpaceBar)) Jump();
+
+	// Arm: a reach after E, otherwise a held product rests against the chest.
+	if (GestureTimer > 0.f)
+	{
+		GestureTimer -= DeltaSeconds;
+		if (GestureTimer <= 0.f) Human->StopLooking();
+	}
+	if (GestureTimer <= 0.f)
+	{
+		if (Held != ETSSProduct::None)
+		{
+			const FVector Carry = GetActorLocation() + GetActorForwardVector() * 38.f + GetActorRightVector() * 14.f + FVector(0.f, 0.f, 22.f);
+			Human->Reach(ETSSHand::Right, Carry, 0.3f);
+		}
+		else
+		{
+			Human->Relax(ETSSHand::Right, 0.3f);
+		}
+	}
+	// In third person the box is really in your hand; in first person it stays steady in view.
+	if (Held != ETSSProduct::None && !bFirstPersonView)
+	{
+		const FRotator Rot(0.f, GetActorRotation().Yaw, 0.f);
+		HeldMesh->SetWorldLocationAndRotation(Human->GetHandWorldLocation(ETSSHand::Right) + Rot.Vector() * (TSSProductDef(Held).BoxSize.X * 0.5f + 3.f), Rot);
+	}
 }
