@@ -3,6 +3,7 @@
 #include "TSSCharacter.h"
 #include "TSSHumanComponent.h"
 #include "TSSRegister.h"
+#include "TSSRoad.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -193,8 +194,35 @@ void ATSSDeliveryTruck::Setup(const FTSSOrder& InOrder, const FTSSDockInfo& InDo
 	Courier->Build(1, TEXT("buttonOpen"), TEXT("jeansLong"), TEXT("oxfords"));
 	Courier->SetShown(false);
 
-	// Courier route: out of the passenger side, in through the shop door, to the drop point; then back the same way.
-	const FVector Side = Dock.TruckStop + FVector(-20.f, Dock.Door.Y < Dock.TruckStop.Y ? -150.f : 150.f, 0.f);
+	// If the map has a road, the truck drives along it: start at its beginning, park beside the shop.
+	Road = ATSSRoad::Find(GetWorld());
+	if (Road.IsValid())
+	{
+		ParkDistance = FMath::Clamp(Road->DistanceNearest(Dock.TruckStop), 0.f, Road->GetLength());
+		RoadDistance = 0.f;
+		PlaceOnRoad();
+	}
+}
+
+void ATSSDeliveryTruck::PlaceOnRoad()
+{
+	SetActorLocationAndRotation(Road->LaneLocation(RoadDistance), Road->LaneRotation(RoadDistance));
+}
+
+bool ATSSDeliveryTruck::GetCourierLocation(FVector& Out) const
+{
+	if (Phase != EPhase::ToDoor && Phase != EPhase::Dropping && Phase != EPhase::Returning) return false;
+	Out = CourierRoot->GetComponentLocation();
+	return true;
+}
+
+void ATSSDeliveryTruck::BuildRoute()
+{
+	// Courier route: out of the side of the truck that faces the shop, in through the door, to the drop point; then back.
+	const FVector Here = GetActorLocation();
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, GetActorForwardVector().GetSafeNormal2D());
+	const float Sign = FVector::DotProduct(Dock.Door - Here, Right) >= 0.f ? 1.f : -1.f;
+	const FVector Side = FVector(Here.X, Here.Y, 0.f) + Right * Sign * 150.f;
 	Route = { Side, FVector(Dock.Door.X + 180.f, Dock.Door.Y, 0.f), Dock.Door, FVector(Dock.Door.X - 120.f, Dock.Door.Y, 0.f), Dock.Drop + FVector(70.f, 0.f, 0.f) };
 }
 
@@ -244,6 +272,29 @@ void ATSSDeliveryTruck::Tick(float Dt)
 	{
 	case EPhase::Driving:
 	{
+		if (Road.IsValid())
+		{
+			// Follow the road's lane, easing to a stop beside the shop.
+			const float Remaining = ParkDistance - RoadDistance;
+			const float Speed = FMath::Clamp(Remaining * 2.5f * Dt, 6.f, 900.f * SpeedScale * Dt);
+			if (Remaining <= Speed)
+			{
+				RoadDistance = ParkDistance;
+				PlaceOnRoad();
+				BuildRoute();
+				Phase = EPhase::ToDoor;
+				RouteIndex = 0;
+				CourierRoot->SetWorldLocation(Route[0]);
+				Courier->SetShown(true);
+				CarriedBox->SetVisibility(true);
+			}
+			else
+			{
+				RoadDistance += Speed;
+				PlaceOnRoad();
+			}
+			break;
+		}
 		const FVector Goal(Dock.TruckStop.X, Dock.TruckStop.Y, Loc.Z);
 		const float Step = 900.f * SpeedScale * Dt;
 		// Ease to a stop over the last stretch.
@@ -252,6 +303,7 @@ void ATSSDeliveryTruck::Tick(float Dt)
 		if (Dist <= Speed)
 		{
 			SetActorLocation(Goal);
+			BuildRoute();
 			Phase = EPhase::ToDoor;
 			RouteIndex = 0;
 			CourierRoot->SetWorldLocation(Route[0]);
@@ -289,6 +341,21 @@ void ATSSDeliveryTruck::Tick(float Dt)
 	case EPhase::Leaving:
 	{
 		const float Step = 900.f * SpeedScale * Dt;
+		if (Road.IsValid())
+		{
+			// Carry on down the road and out of sight.
+			RoadDistance += Step;
+			if (RoadDistance >= Road->GetLength())
+			{
+				if (UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz->OnTruckFinished();
+				Destroy();
+			}
+			else
+			{
+				PlaceOnRoad();
+			}
+			break;
+		}
 		SetActorLocation(Loc + FVector(Step, 0.f, 0.f));
 		if (GetActorLocation().X > Dock.TruckStart.X)
 		{

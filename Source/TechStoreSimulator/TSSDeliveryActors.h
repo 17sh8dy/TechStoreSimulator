@@ -9,6 +9,7 @@
 class UStaticMeshComponent;
 class UTextRenderComponent;
 class UTSSHumanComponent;
+class ATSSRoad;
 
 /** Where deliveries happen (world space, cm). */
 struct FTSSDockInfo
@@ -81,11 +82,20 @@ public:
 
 	void Setup(const FTSSOrder& InOrder, const FTSSDockInfo& InDock, float InSpeedScale);
 
+	/** While the courier is out of the truck, where they are (the shop door uses this to open for them). */
+	bool GetCourierLocation(FVector& Out) const;
+	/** True if this truck is driving on a road (rather than the old straight line). */
+	bool IsOnRoad() const { return Road.IsValid(); }
+	/** The road this truck follows, if any. */
+	ATSSRoad* GetRoad() const { return Road.Get(); }
+
 private:
 	enum class EPhase : uint8 { Driving, ToDoor, Dropping, Returning, Leaving };
 
 	UStaticMeshComponent* Box(const TCHAR* Name, FVector Loc, FVector Size, FLinearColor Color, FRotator Rot = FRotator::ZeroRotator, bool bCylinder = false);
 	bool WalkTo(const FVector& Target, float Dt);
+	void BuildRoute();
+	void PlaceOnRoad();
 	void DropParcels();
 
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
@@ -101,4 +111,9 @@ private:
 	TArray<FVector> Route;   // courier waypoints, there and back
 	int32 RouteIndex = 0;
 	bool bDropped = false;
+
+	// Road driving: the truck follows the road's lane by distance along it.
+	TWeakObjectPtr<ATSSRoad> Road;
+	float RoadDistance = 0.f;
+	float ParkDistance = 0.f;
 };
