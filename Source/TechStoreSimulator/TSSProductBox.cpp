@@ -63,6 +63,9 @@ void UTSSProductBoxComponent::OnRegister()
 		Panel->SetStaticMesh(TSSCubeMesh());
 		Panel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Panel->SetCastShadow(false);
+		// Born hidden: it only shows once Apply() gives it packaging art. A fresh panel is visible by default and has
+		// no material, so an empty hand would otherwise draw a default checkered cube.
+		Panel->SetHiddenInGame(true);
 		Panel->SetupAttachment(this);
 		Panel->RegisterComponent();
 	}

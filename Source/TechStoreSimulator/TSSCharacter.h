@@ -27,6 +27,8 @@ public:
 
 	UTSSHumanComponent* GetHuman() const { return Human; }
 	ETSSProduct GetHeld() const { return Held; }
+	/** For tests: true if anything is drawn in the player's hands that should not be (nothing held, but a box shows). */
+	bool IsStrayBoxDrawn() const;
 	/** The specific customer item in the hands (checkout), if any. Cleared when the hands empty. */
 	ATSSProductItem* GetHeldItem() const { return HeldItem; }
 	void SetHeldItem(ATSSProductItem* Item) { HeldItem = Item; }

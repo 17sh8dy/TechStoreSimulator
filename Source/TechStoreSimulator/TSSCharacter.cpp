@@ -83,6 +83,11 @@ void ATSSCharacter::ApplyView()
 	Human->SetHiddenFromOwner(bFirstPerson);
 }
 
+bool ATSSCharacter::IsStrayBoxDrawn() const
+{
+	return Held == ETSSProduct::None && (HeldMesh->IsVisible() || HeldMesh->IsPanelDrawn());
+}
+
 void ATSSCharacter::SetHeld(ETSSProduct Product)
 {
 	Held = Product;

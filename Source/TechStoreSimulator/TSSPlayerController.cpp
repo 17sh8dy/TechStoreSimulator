@@ -218,6 +218,8 @@ void ATSSPlayerController::TSSSelfTest()
 	Check(TEXT("found player, store, customer spawner, a shelf and the shop door"), Me && Store && CS && Shelf && Door);
 	if (!(Me && Store && CS && Shelf && Door)) return;
 
+	Check(TEXT("empty hands: no box is drawn in front of the player"), !Me->IsStrayBoxDrawn());
+
 	// Stock comes from StoreDesk orders now; here the hands are loaded directly to exercise the shelf itself.
 	auto Load = [Me](ETSSProduct P) { Me->SetHeld(P); };
 
