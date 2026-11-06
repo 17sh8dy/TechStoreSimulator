@@ -67,6 +67,7 @@ void UTSSStoreSubsystem::ExportTo(UTSSBusinessSave* S) const
 	S->TaxCollected = TaxCollected; S->LifetimeRevenue = LifetimeRevenue; S->TodayRevenue = TodayRevenue;
 	S->ProductsSold = ProductsSold; S->OrderSpend = OrderSpend; S->UpgradeSpend = UpgradeSpend; S->Day = Day;
 	S->Transactions = Transactions;
+	S->bStoreOpen = bOpen;
 }
 
 void UTSSStoreSubsystem::ImportFrom(const UTSSBusinessSave* S)
@@ -75,5 +76,6 @@ void UTSSStoreSubsystem::ImportFrom(const UTSSBusinessSave* S)
 	TaxCollected = S->TaxCollected; LifetimeRevenue = S->LifetimeRevenue; TodayRevenue = S->TodayRevenue;
 	ProductsSold = S->ProductsSold; OrderSpend = S->OrderSpend; UpgradeSpend = S->UpgradeSpend; Day = FMath::Max(1, S->Day);
 	Transactions = S->Transactions;
+	bOpen = S->bStoreOpen;
 	OnChanged.Broadcast();
 }

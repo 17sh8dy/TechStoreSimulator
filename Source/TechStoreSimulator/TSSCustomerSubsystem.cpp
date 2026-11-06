@@ -25,11 +25,17 @@ ATSSCustomer* UTSSCustomerSubsystem::SpawnCustomer(float SpeedScale)
 	return C;
 }
 
+bool UTSSCustomerSubsystem::MaySpawn() const
+{
+	const UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
+	return bAutoSpawn && Store && Store->IsOpen() && !Store->IsSimPaused();
+}
+
 void UTSSCustomerSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
-	if (!bAutoSpawn || !Store || Store->IsSimPaused()) return;
+	if (!MaySpawn()) return;
 
 	NextSpawnIn -= DeltaTime;
 	if (NextSpawnIn > 0.f) return;

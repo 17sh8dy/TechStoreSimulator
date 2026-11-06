@@ -20,6 +20,9 @@ public:
 	/** Spawns one customer at the register's door right now. Null if the map has no register. */
 	ATSSCustomer* SpawnCustomer(float SpeedScale = 1.f);
 
+	/** True when the spawner is allowed to send someone in: automatic spawning on, shop open, no menu up. */
+	bool MaySpawn() const;
+
 	/** Off in the self-test so it can control exactly who walks in. */
 	bool bAutoSpawn = true;
 	int32 MaxCustomers = 3;

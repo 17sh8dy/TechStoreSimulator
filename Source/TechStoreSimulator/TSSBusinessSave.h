@@ -28,6 +28,7 @@ public:
 	UPROPERTY() int32 OrderSpend = 0;
 	UPROPERTY() int32 UpgradeSpend = 0;
 	UPROPERTY() int32 Day = 1;
+	UPROPERTY() bool bStoreOpen = true;   // the Open/Closed sign
 	UPROPERTY() TArray<FTSSTransaction> Transactions;
 
 	// Progression

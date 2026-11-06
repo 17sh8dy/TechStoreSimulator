@@ -11,7 +11,7 @@ namespace TSSStoreLayout
 {
 	constexpr int32 NumStages = 3;
 	constexpr float FrontX = 700.f;         // inside face of the front wall
-	constexpr float DoorHalfGap = 100.f;    // half the width of the doorway
+	constexpr float DoorHalfGap = 60.f;     // half the width of the doorway (a 120 cm opening for a ~100 cm door)
 
 	inline int32 ClampStage(int32 Stage) { return FMath::Clamp(Stage, 0, NumStages - 1); }
 	/** X of the inside face of the back wall. */

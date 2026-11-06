@@ -39,6 +39,10 @@ public:
 	int32 GetServed() const { return Served; }
 	int32 GetLost() const { return Lost; }
 
+	/** The Open/Closed sign. While closed, no new customers come in (the ones already inside finish shopping). */
+	bool IsOpen() const { return bOpen; }
+	void SetOpen(bool bNewOpen) { if (bOpen != bNewOpen) { bOpen = bNewOpen; OnChanged.Broadcast(); } }
+
 	/** True while a menu is up: customers freeze. Set by the player controller. */
 	bool IsSimPaused() const { return bSimPaused; }
 	void SetSimPaused(bool bPaused) { bSimPaused = bPaused; }
@@ -78,6 +82,7 @@ private:
 	int32 OrderSpend = 0;
 	int32 UpgradeSpend = 0;
 	int32 Day = 1;
+	bool bOpen = true;
 	bool bSimPaused = true;
 	int32 Prices[static_cast<int32>(ETSSProduct::Count)] = {};
 };
