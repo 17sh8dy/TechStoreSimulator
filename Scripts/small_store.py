@@ -2,7 +2,7 @@
 
 Run: UnrealEditor-Cmd.exe TechStoreSimulator.uproject /Game/Maps/Store_Main -ExecutePythonScript="Scripts/small_store.py" -unattended -nosplash -nullrhi
 
-Replaces the hand-placed walls/floor/ceiling/lights, shelves, crates, register, computer and dock with the stage-0 layout
+Replaces the hand-placed walls/floor/ceiling/lights, shelves, register, computer and dock with the stage-0 layout
 (front wall x=700 with the door; shop is 7 x 6 m). The outdoor ground, sky, sun and post-process volume are kept.
 Everything that lives against a wall carries an anchor tag (TSSAnchorBack/Left/Right) so StoreDesk expansions slide it.
 Stage-0 coordinates (cm): back wall x=0, side walls y=+-300, front wall x=700, door gap y=+-100.
@@ -23,7 +23,7 @@ for a in list(eas.get_all_level_actors()):
         eas.destroy_actor(a)
     elif isinstance(a, unreal.PointLight) and label.startswith("StoreLight_"):
         eas.destroy_actor(a)
-    elif isinstance(a, (unreal.TSSShelf, unreal.TSSCrate, unreal.TSSRegister, unreal.TSSStoreDeskComputer,
+    elif isinstance(a, (unreal.TSSShelf, unreal.TSSRegister, unreal.TSSStoreDeskComputer,
                         unreal.TSSDeliveryDock, unreal.TSSStoreShell)):
         eas.destroy_actor(a)
 
@@ -39,18 +39,6 @@ for i, x in enumerate((150, 365)):
     s = eas.spawn_actor_from_class(unreal.TSSShelf, v(x, -274), unreal.Rotator(0, 0, 90))
     s.set_actor_label("Shelf_Start_%d" % i)
     tag(s, "TSSAnchorLeft")
-
-# ---- wholesale crates against the back wall (a 2 x 3 block) ------------------------------------------------
-products = [unreal.TSSProduct.PHONE, unreal.TSSProduct.LAPTOP, unreal.TSSProduct.HEADPHONES,
-            unreal.TSSProduct.CONSOLE, unreal.TSSProduct.MONITOR, unreal.TSSProduct.KEYBOARD]
-for i, p in enumerate(products):
-    x = 45 + 100 * (i // 3)
-    y = -15 + 95 * (i % 3)
-    c = eas.spawn_actor_from_class(unreal.TSSCrate, v(x, y, 30), unreal.Rotator(0, 0, 0))
-    c.set_editor_property("product", p)
-    c.set_actor_label("Crate_%d" % i)
-    c.rebuild()
-    tag(c, "TSSAnchorBack")
 
 # ---- checkout counter on the right (+Y) wall by the door; the owner stands between the counter and the wall ----
 reg = eas.spawn_actor_from_class(unreal.TSSRegister, v(480, 170), unreal.Rotator(0, 0, 90))

@@ -568,8 +568,7 @@ public:
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Sales tax collected"), DskMoney(S->GetTaxCollected())) ]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskRow2(TEXT("Spent on stock orders"), DskMoney(S->GetOrderSpend())) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Spent on upgrades"), DskMoney(S->GetUpgradeSpend())) ]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskRow2(TEXT("Net (revenue - orders - upgrades)"), DskMoney(Net), true, Net >= 0 ? Th().Good : Th().Bad) ]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 0.f)[ DskWrapped(TEXT("Stock bought directly from the wholesale crates in the shop is not counted under orders yet."), 12, Th().Dim) ])
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskRow2(TEXT("Net (revenue - orders - upgrades)"), DskMoney(Net), true, Net >= 0 ? Th().Good : Th().Bad) ])
 				]
 				+ SVerticalBox::Slot().AutoHeight()
 				[

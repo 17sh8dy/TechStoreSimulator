@@ -5,7 +5,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
 #include "TSSCharacter.h"
-#include "TSSCrate.h"
+#include "TSSShopDoor.h"
+#include "TSSRoad.h"
 #include "TSSShelf.h"
 #include "TSSStoreSubsystem.h"
 #include "TSSCustomer.h"
@@ -34,6 +35,29 @@ void ATSSPlayerController::BeginPlay()
 	Menu->AddToViewport(10);
 	ShowMenu(true);
 
+	// `-TSSStreetShots`: sends a truck down the road and photographs it, then quits (for looking at the street).
+	if (FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")))
+	{
+		FTimerHandle H;
+		GetWorldTimerManager().SetTimer(H, [this]()
+		{
+			TSSStart();
+			auto At = [this](float Delay, FString Cmd)
+			{
+				FTimerHandle T;
+				GetWorldTimerManager().SetTimer(T, [this, Cmd]() { ConsoleCommand(Cmd); }, Delay, false);
+			};
+			At(0.2f, TEXT("TSSTruck"));
+			At(0.5f, TEXT("TSSLook 760 -900 140 25 -5"));
+			At(2.2f, TEXT("Shot ShowUI"));
+			At(3.0f, TEXT("TSSLook 800 -250 150 15 -6"));
+			At(4.6f, TEXT("Shot ShowUI"));
+			At(5.4f, TEXT("TSSLook 830 120 150 -15 -6"));
+			At(7.0f, TEXT("Shot ShowUI"));
+			At(8.5f, TEXT("quit"));
+		}, 1.5f, false);
+	}
+
 	// Debug harness: `-TSSAutoTest` runs the interaction self-test and takes screenshots, then quits.
 	if (FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest")))
 	{
@@ -59,10 +83,12 @@ void ATSSPlayerController::BeginPlay()
 				Shot(2.5f, FString::Printf(TEXT("TSSLook %f %f 40 %f -5"), P.X, P.Y, Face.Yaw));
 			}
 			Shot(3.5f, TEXT("Shot ShowUI"));
-			// 3: the wholesale crates.
-			Shot(4.5f, TEXT("TSSLook -100 150 110 90 -18"));
+			// 3: the shop door and its sign, from inside and from the street.
+			Shot(4.5f, TEXT("TSSLook 430 0 100 0 -4"));
 			Shot(5.5f, TEXT("Shot ShowUI"));
-			Shot(6.5f, TEXT("TSSCustomerTest"));
+			Shot(6.5f, TEXT("TSSLook 780 -150 130 20 -6"));
+			Shot(7.5f, TEXT("Shot ShowUI"));
+			Shot(8.5f, TEXT("TSSCustomerTest"));
 		}, 1.5f, false);
 	}
 }
@@ -184,30 +210,22 @@ void ATSSPlayerController::TSSSelfTest()
 
 	ATSSCharacter* Me = Cast<ATSSCharacter>(GetPawn());
 	UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
-	ATSSCrate* PhoneCrate = nullptr;
-	ATSSCrate* LaptopCrate = nullptr;
+	UTSSCustomerSubsystem* CS = GetWorld()->GetSubsystem<UTSSCustomerSubsystem>();
 	ATSSShelf* Shelf = nullptr;
-	for (TActorIterator<ATSSCrate> It(GetWorld()); It; ++It)
-	{
-		if (It->Product == ETSSProduct::Phone) PhoneCrate = *It;
-		if (It->Product == ETSSProduct::Laptop) LaptopCrate = *It;
-	}
+	ATSSShopDoor* Door = nullptr;
 	for (TActorIterator<ATSSShelf> It(GetWorld()); It; ++It) { Shelf = *It; break; }
-	Check(TEXT("found player, store, crates and a shelf"), Me && Store && PhoneCrate && LaptopCrate && Shelf);
-	if (!(Me && Store && PhoneCrate && LaptopCrate && Shelf)) return;
+	for (TActorIterator<ATSSShopDoor> It(GetWorld()); It; ++It) { Door = *It; break; }
+	Check(TEXT("found player, store, customer spawner, a shelf and the shop door"), Me && Store && CS && Shelf && Door);
+	if (!(Me && Store && CS && Shelf && Door)) return;
+
+	// Stock comes from StoreDesk orders now; here the hands are loaded directly to exercise the shelf itself.
+	auto Load = [Me](ETSSProduct P) { Me->SetHeld(P); };
 
 	// A hit on the shelf's first-tier, second-column slot, from the shelf's own frame.
 	FHitResult Hit;
 	Hit.ImpactPoint = Shelf->GetActorTransform().TransformPosition(FVector(24.f, -25.f, 30.f));
-	FHitResult CrateHit;
 
-	Store->Earn(3000); // enough to buy a full slot's worth; the game itself starts you with $1000
-	const int32 Start = Store->GetMoney();
-	PhoneCrate->Interact(Me, CrateHit);
-	Check(TEXT("buying a phone takes $300 and fills the hands"), Me->GetHeld() == ETSSProduct::Phone && Store->GetMoney() == Start - 300);
-	LaptopCrate->Interact(Me, CrateHit);
-	Check(TEXT("hands full: a second crate does nothing"), Me->GetHeld() == ETSSProduct::Phone && Store->GetMoney() == Start - 300);
-
+	Load(ETSSProduct::Phone);
 	Shelf->Interact(Me, Hit);
 	Check(TEXT("placing empties the hands"), Me->GetHeld() == ETSSProduct::None);
 	Check(TEXT("prompt on a stocked slot offers Take"), Shelf->GetPrompt(Me, Hit).Contains(TEXT("[E] Take Smartphone")));
@@ -215,44 +233,67 @@ void ATSSPlayerController::TSSSelfTest()
 	Shelf->Interact(Me, Hit);
 	Check(TEXT("taking returns the phone to the hands"), Me->GetHeld() == ETSSProduct::Phone);
 	Shelf->Interact(Me, Hit);
-	for (int32 i = 0; i < 3; ++i) { PhoneCrate->Interact(Me, CrateHit); Shelf->Interact(Me, Hit); }
-	PhoneCrate->Interact(Me, CrateHit);
+	for (int32 i = 0; i < 3; ++i) { Load(ETSSProduct::Phone); Shelf->Interact(Me, Hit); }
+	Load(ETSSProduct::Phone);
 	Shelf->Interact(Me, Hit);
 	Check(TEXT("a full slot refuses a fifth phone"), Me->GetHeld() == ETSSProduct::Phone && Shelf->GetPrompt(Me, Hit).Contains(TEXT("full")));
-	const int32 BeforeReturn = Store->GetMoney();
-	PhoneCrate->Interact(Me, CrateHit);
-	Check(TEXT("returning to the crate refunds $300"), Me->GetHeld() == ETSSProduct::None && Store->GetMoney() == BeforeReturn + 300);
 
-	LaptopCrate->Interact(Me, CrateHit);
+	Load(ETSSProduct::Laptop);
 	Shelf->Interact(Me, Hit);
 	Check(TEXT("a slot holding phones refuses a laptop"), Me->GetHeld() == ETSSProduct::Laptop);
-	LaptopCrate->Interact(Me, CrateHit);
+	Load(ETSSProduct::None);
 
 	const int32 Price = Store->GetPrice(ETSSProduct::Phone);
 	Shelf->Adjust(Me, Hit, +1);
 	Shelf->Adjust(Me, Hit, +1);
 	Check(TEXT("wheel up twice raises the phone price by $2"), Store->GetPrice(ETSSProduct::Phone) == Price + 2);
 
-	// Leave the shop looking stocked for screenshots.
+	// Leave the shop looking stocked for screenshots and the customer test.
 	const ETSSProduct Fill[] = { ETSSProduct::Laptop, ETSSProduct::Headphones, ETSSProduct::Console, ETSSProduct::Monitor, ETSSProduct::Keyboard };
-	TArray<ATSSCrate*> Crates;
-	for (TActorIterator<ATSSCrate> It(GetWorld()); It; ++It) Crates.Add(*It);
-	Store->Earn(5000);
 	int32 Slot = 0;
 	for (ETSSProduct P : Fill)
 	{
-		for (ATSSCrate* C : Crates) if (C->Product == P)
-		{
-			FHitResult H;
-			// Tiers 1 and 2 (the first tier already has the phones).
-			const float Z = 90.f + 60.f * (Slot / ATSSShelf::Columns);
-			H.ImpactPoint = Shelf->GetActorTransform().TransformPosition(FVector(24.f, -75.f + 50.f * (Slot % ATSSShelf::Columns), Z));
-			for (int32 i = 0; i < FMath::Min(3, TSSProductDef(P).SlotCapacity()); ++i) { C->Interact(Me, CrateHit); Shelf->Interact(Me, H); }
-			break;
-		}
+		FHitResult H;
+		// Tiers 1 and 2 (the first tier already has the phones).
+		const float Z = 90.f + 60.f * (Slot / ATSSShelf::Columns);
+		H.ImpactPoint = Shelf->GetActorTransform().TransformPosition(FVector(24.f, -75.f + 50.f * (Slot % ATSSShelf::Columns), Z));
+		for (int32 i = 0; i < FMath::Min(3, TSSProductDef(P).SlotCapacity()); ++i) { Load(P); Shelf->Interact(Me, H); }
 		++Slot;
 	}
+	Load(ETSSProduct::None);
+
+	// ---- the door and the Open/Closed sign ----
+	Check(TEXT("the shop starts open"), Store->IsOpen());
+	Check(TEXT("open: customers are allowed to come in"), CS->MaySpawn());
+	Check(TEXT("door prompt offers to open it"), Door->GetPrompt(Me, FHitResult()).Contains(TEXT("Open the door")));
+	Door->Interact(Me, FHitResult());
+	Check(TEXT("E on the door holds it open"), Door->IsHeldOpen());
+	Check(TEXT("door prompt now offers to close it"), Door->GetPrompt(Me, FHitResult()).Contains(TEXT("Close the door")));
+	Door->Interact(Me, FHitResult());
+	Check(TEXT("E again lets it close"), !Door->IsHeldOpen());
+
+	Check(TEXT("the sign prompt offers to close"), Door->SignPrompt().Contains(TEXT("the shop is OPEN")));
+	Door->ToggleSign();
+	Check(TEXT("flipping the sign closes the shop"), !Store->IsOpen());
+	Check(TEXT("closed: no customers come in even though the shelves are full"), !CS->MaySpawn());
+	Check(TEXT("the sign prompt now offers to reopen"), Door->SignPrompt().Contains(TEXT("the shop is CLOSED")));
+	Door->ToggleSign();
+	Check(TEXT("flipping it again reopens the shop"), Store->IsOpen() && CS->MaySpawn());
+
 	UE_LOG(LogTemp, Display, TEXT("TSSTEST DONE fails=%d"), Fails);
+}
+
+void ATSSPlayerController::TSSTruck()
+{
+	FTSSOrder Empty;
+	Empty.Id = -1;
+	const FTSSDockInfo Dock = ATSSDeliveryDock::Resolve(GetWorld());
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (ATSSDeliveryTruck* Truck = GetWorld()->SpawnActor<ATSSDeliveryTruck>(ATSSDeliveryTruck::StaticClass(), FTransform(FRotator(0.f, 180.f, 0.f), Dock.TruckStart), Params))
+	{
+		Truck->Setup(Empty, Dock, 1.f);
+	}
 }
 
 void ATSSPlayerController::TSSCustomer()
@@ -323,11 +364,15 @@ void ATSSPlayerController::TSSCustomerTest()
 		GetWorldTimerManager().SetTimer(T2, [this]() { ConsoleCommand(TEXT("Shot ShowUI")); }, 0.6f, false);
 	};
 
+	ATSSShopDoor* ShopDoor = nullptr;
+	for (TActorIterator<ATSSShopDoor> DIt(GetWorld()); DIt; ++DIt) { ShopDoor = *DIt; break; }
+	if (ShopDoor) ShopDoor->ConsumePeakAngle();
+
 	Spawn(ETSSPayMethod::Cash);
 	Check(TEXT("a customer spawns at the door"), St->Customer.IsValid());
 
 	FTimerHandle* Handle = new FTimerHandle();
-	GetWorldTimerManager().SetTimer(*Handle, [this, St, CS, Store, Reg, Me, Check, Spawn, Snap, Handle]()
+	GetWorldTimerManager().SetTimer(*Handle, [this, St, CS, Store, Reg, Me, Check, Spawn, Snap, Handle, ShopDoor]()
 	{
 		const float Dt = 0.2f;
 		St->Elapsed += Dt;
@@ -343,6 +388,11 @@ void ATSSPlayerController::TSSCustomerTest()
 			case 0: // customer reaches the counter and puts the basket down
 				if (Reg->GetPhase() != ETSSCheckoutPhase::Scanning || !Reg->AllItemsPlaced()) { if (bTimeout) Fail(TEXT("customer reached the counter and put their basket down")); return; }
 				{
+					if (ShopDoor && bCash)
+					{
+						Check(TEXT("the door swung open for the customer walking in"), ShopDoor->ConsumePeakAngle() < -30.f);
+						Check(TEXT("and shut again behind them"), ShopDoor->GetAngle() > -5.f && !ShopDoor->IsHeldOpen());
+					}
 					const TArray<TObjectPtr<ATSSProductItem>>& Items = Reg->GetItems();
 					Check(TEXT("the basket is on the counter as real product items"), Items.Num() >= 1);
 					St->ExpectedSub = 0;
@@ -618,6 +668,14 @@ void ATSSPlayerController::TSSDeskTest()
 				if (St->Elapsed > 60.f) { Check(TEXT("the truck delivered the order to the dock"), false); Done(); }
 				return;
 			}
+			for (TActorIterator<ATSSDeliveryTruck> TIt(GetWorld()); TIt; ++TIt)
+			{
+				ATSSRoad* Rd = ATSSRoad::Find(GetWorld());
+				Check(TEXT("the delivery truck is driving on the road"), Rd && TIt->IsOnRoad() && Rd->LaneError(TIt->GetActorLocation()) < 15.f);
+				break;
+			}
+			ConsoleCommand(TEXT("TSSLook 850 200 150 0 -6")); // a look at the parked truck on the road
+			Snap();
 			TArray<ATSSParcel*> Parcels;
 			for (TActorIterator<ATSSParcel> It(GetWorld()); It; ++It) Parcels.Add(*It);
 			Check(TEXT("one parcel per order line is waiting on the dock"), Parcels.Num() == 2);

@@ -1,3 +1,5 @@
+"""LEGACY - DO NOT RUN. It wipes the hand-edited Store_Main and still references the removed TSSCrate class.
+Use place_door_and_road.py / place_register.py / tune_lighting.py (in-place) instead."""
 """Builds the store interior in /Game/Maps/Store_Main. Safe to re-run: it clears what it made before.
 
 Run headless (from the project root):

@@ -37,6 +37,8 @@ public:
 	UFUNCTION(Exec) void TSSSelfTest();
 	/** Debug: send a customer through the door right now. */
 	UFUNCTION(Exec) void TSSCustomer();
+	/** Developer: sends an empty delivery truck down the road to the shop (no order, nothing delivered). */
+	UFUNCTION(Exec) void TSSTruck();
 	/** Debug: run two customers through the real shop (one buys, one balks at the price) and log TSSTEST lines. */
 	UFUNCTION(Exec) void TSSCustomerTest();
 	/** Debug: put the player at X Y Z facing Yaw/Pitch (for screenshots). */
