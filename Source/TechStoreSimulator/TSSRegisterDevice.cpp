@@ -3,6 +3,8 @@
 #include "TSSCharacter.h"
 #include "TSSCheckoutScreens.h"
 #include "TSSProducts.h"
+#include "TSSMoneyVisual.h"
+#include "TSSBusinessSubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Components/WidgetComponent.h"
@@ -164,12 +166,16 @@ namespace
 	constexpr float DrawerY = -85.f;
 	constexpr float DrawerClosedX = 8.f;
 	constexpr float DrawerTravel = 46.f;
-	constexpr float StackPitch = 9.2f;
-	float StackY(int32 Index) { return -(Index - 2.5f) * StackPitch; } // tray-local; $1 on the owner's left
-
-	const FLinearColor BillColors[TSSMoney::NumDenoms] = {
-		FLinearColor(0.62f, 0.78f, 0.62f), FLinearColor(0.5f, 0.66f, 0.85f), FLinearColor(0.88f, 0.76f, 0.45f),
-		FLinearColor(0.45f, 0.8f, 0.5f), FLinearColor(0.88f, 0.55f, 0.65f), FLinearColor(0.72f, 0.85f, 0.72f) };
+	// Tray-local layout: notes in the back row, coins in the front row (the owner stands on the +X side).
+	constexpr float NoteRowX = -9.f;
+	constexpr float CoinRowX = 13.f;
+	constexpr float NotePitch = 9.2f;
+	constexpr float CoinPitch = 10.5f;
+	float SlotY(int32 Piece)
+	{
+		return Piece < TSSMoney::NumBills ? -(Piece - 2.5f) * NotePitch : -(Piece - TSSMoney::NumBills - 2.f) * CoinPitch;
+	}
+	float SlotX(int32 Piece) { return Piece < TSSMoney::NumBills ? NoteRowX : CoinRowX; }
 }
 
 ATSSCashDrawer::ATSSCashDrawer()
@@ -184,26 +190,91 @@ ATSSCashDrawer::ATSSCashDrawer()
 	Box(TEXT("TrayBack"), FVector(-25.f, 0.f, 89.f), FVector(2.f, 60.f, 9.f), DevSteel, FRotator::ZeroRotator, Tray);
 	Box(TEXT("TraySideL"), FVector(0.f, 30.f, 89.f), FVector(50.f, 2.f, 9.f), DevSteel, FRotator::ZeroRotator, Tray);
 	Box(TEXT("TraySideR"), FVector(0.f, -30.f, 89.f), FVector(50.f, 2.f, 9.f), DevSteel, FRotator::ZeroRotator, Tray);
+	// Dividers between the slots.
+	Box(TEXT("RowDivider"), FVector(2.f, 0.f, 88.f), FVector(1.f, 58.f, 5.f), DevSteel, FRotator::ZeroRotator, Tray);
+
 	for (int32 i = 0; i < TSSMoney::NumDenoms; ++i)
 	{
 		const FString Idx = FString::FromInt(i);
-		Box(*(TEXT("Stack") + Idx), FVector(4.f, StackY(i), 90.5f), FVector(15.f, 8.f, 4.f), BillColors[i], FRotator::ZeroRotator, Tray);
-		// Flat label on the front lip of each stack, readable from the owner's side.
-		Label(*(TEXT("Denom") + Idx), FVector(-8.f, StackY(i), 93.f), FRotator(90.f, 0.f, 0.f), 4.5f, FColor(20, 40, 20), Tray)
-			->SetText(FText::FromString(FString::Printf(TEXT("$%d"), TSSMoney::Denoms[i])));
+		const bool bCoin = TSSMoney::Denom(i).bCoin;
+		// What shows in the slot: the top note of the pile, or the top coin of the stack.
+		UStaticMeshComponent* Top = CreateDefaultSubobject<UStaticMeshComponent>(*(TEXT("Top") + Idx));
+		Top->SetupAttachment(Tray);
+		Top->SetStaticMesh(bCoin ? TSSMoneyArt::CylinderMesh() : TSSCubeMesh());
+		Top->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Top->SetCastShadow(false);
+		Top->SetRelativeLocation(FVector(SlotX(i), SlotY(i), 90.f));
+		Tops.Add(Top);
+
+		UTextRenderComponent* L = Label(*(TEXT("Denom") + Idx), FVector(bCoin ? CoinRowX + 7.5f : NoteRowX + 9.f, SlotY(i), 91.5f), FRotator(90.f, 0.f, 0.f), 2.6f, FColor(235, 245, 235), Tray);
+		SlotLabels.Add(L);
 	}
 	CashLabel = Label(TEXT("CashLabel"), FVector(26.5f, 0.f, 89.f), FRotator::ZeroRotator, 3.f, FColor(190, 255, 200), Tray);
+	Stock = TSSMoney::StartingFloat();
 }
 
-void ATSSCashDrawer::UpdateLabel()
+void ATSSCashDrawer::BeginPlay()
 {
-	CashLabel->SetText(FText::FromString(FString::Printf(TEXT("TILL  $%d"), CashOnHand)));
+	Super::BeginPlay();
+	// Notes and coins use the packaging material for their art; give every slot its art now that the world exists.
+	Refresh();
 }
 
-void ATSSCashDrawer::AddCash(int32 Amount)
+void ATSSCashDrawer::Refresh()
 {
-	CashOnHand += Amount;
-	UpdateLabel();
+	for (int32 i = 0; i < TSSMoney::NumDenoms; ++i)
+	{
+		const TSSMoney::FDenom& Def = TSSMoney::Denom(i);
+		UStaticMeshComponent* Top = Tops[i];
+		const int32 N = Stock.Count[i];
+		Top->SetMaterial(0, TSSMoneyArt::Material(i));
+		if (Def.bCoin)
+		{
+			const float Dia = 4.2f;
+			const float H = FMath::Clamp(N * 0.12f, 0.4f, 3.5f);
+			Top->SetRelativeScale3D(FVector(Dia / 100.f, Dia / 100.f, H / 100.f));
+			Top->SetRelativeLocation(FVector(SlotX(i), SlotY(i), 87.5f + H * 0.5f));
+		}
+		else
+		{
+			// Notes are shown well under life size in the drawer (about 0.6x): a little pile of that denomination.
+			const float H = FMath::Clamp(N * 0.1f, 0.3f, 3.f);
+			Top->SetRelativeScale3D(FVector(9.2f / 100.f, 4.0f / 100.f * 1.0f, H / 100.f));
+			Top->SetRelativeLocation(FVector(SlotX(i), SlotY(i), 87.5f + H * 0.5f));
+		}
+		Top->SetVisibility(N > 0);
+		SlotLabels[i]->SetText(FText::FromString(FString::Printf(TEXT("%s\nx%d"), Def.Short, N)));
+		SlotLabels[i]->SetTextRenderColor(N > 0 ? FColor(235, 245, 235) : FColor(255, 120, 100));
+	}
+	CashLabel->SetText(FText::FromString(FString::Printf(TEXT("TILL  %s"), *TSSMoney::Format(Stock.TotalCents()))));
+}
+
+bool ATSSCashDrawer::TakePiece(int32 Piece)
+{
+	if (Piece < 0 || Piece >= TSSMoney::NumDenoms || Stock.Count[Piece] <= 0) return false;
+	--Stock.Count[Piece];
+	Refresh();
+	return true;
+}
+
+void ATSSCashDrawer::ReturnPiece(int32 Piece)
+{
+	if (Piece < 0 || Piece >= TSSMoney::NumDenoms) return;
+	++Stock.Count[Piece];
+	Refresh();
+}
+
+void ATSSCashDrawer::Receive(const TArray<int32>& Pieces)
+{
+	for (int32 P : Pieces) if (P >= 0 && P < TSSMoney::NumDenoms) ++Stock.Count[P];
+	Refresh();
+}
+
+void ATSSCashDrawer::RefillFloat()
+{
+	const TSSMoney::FStock Float = TSSMoney::StartingFloat();
+	for (int32 i = 0; i < TSSMoney::NumDenoms; ++i) Stock.Count[i] = FMath::Max(Stock.Count[i], Float.Count[i]);
+	Refresh();
 }
 
 void ATSSCashDrawer::Tick(float Dt)
@@ -216,14 +287,17 @@ void ATSSCashDrawer::Tick(float Dt)
 	Tray->SetRelativeLocation(FVector(DrawerClosedX + DrawerTravel * Eased, DrawerY, 0.f));
 }
 
-int32 ATSSCashDrawer::StackAt(const FHitResult& Hit) const
+int32 ATSSCashDrawer::SlotAt(const FHitResult& Hit) const
 {
 	const FVector Local = Tray->GetComponentTransform().InverseTransformPosition(Hit.ImpactPoint);
-	int32 Best = 0;
+	const bool bCoins = Local.X > 2.f;
+	const int32 From = bCoins ? TSSMoney::NumBills : 0;
+	const int32 To = bCoins ? TSSMoney::NumDenoms : TSSMoney::NumBills;
+	int32 Best = From;
 	float BestD = TNumericLimits<float>::Max();
-	for (int32 i = 0; i < TSSMoney::NumDenoms; ++i)
+	for (int32 i = From; i < To; ++i)
 	{
-		const float D = FMath::Abs(Local.Y - StackY(i));
+		const float D = FMath::Abs(Local.Y - SlotY(i));
 		if (D < BestD) { BestD = D; Best = i; }
 	}
 	return Best;
@@ -233,16 +307,20 @@ FString ATSSCashDrawer::GetPrompt(const ATSSCharacter* Player, const FHitResult&
 {
 	const ATSSRegister* R = GetRegister();
 	if (!R) return FString();
-	if (R->GetPhase() != ETSSCheckoutPhase::CashDue || !IsOpen()) return FString::Printf(TEXT("Cash drawer\nTill: $%d"), CashOnHand);
-	return FString::Printf(TEXT("[E] Add a $%d bill to the change   |   [Wheel] take the last one back\nGiving $%d of $%d due"),
-		TSSMoney::Denoms[StackAt(Hit)], R->GetChangeGiven(), R->GetChangeDue());
+	if (R->GetPhase() != ETSSCheckoutPhase::CashDue || !IsOpen())
+		return FString::Printf(TEXT("Cash drawer\nTill: %s"), *TSSMoney::Format(Stock.TotalCents()));
+	const int32 Slot = SlotAt(Hit);
+	const TSSMoney::FDenom& Def = TSSMoney::Denom(Slot);
+	if (Stock.Count[Slot] <= 0) return FString::Printf(TEXT("Out of %s\nGiving %s of %s due"), Def.Name, *TSSMoney::Format(R->GetChangeGiven()), *TSSMoney::Format(R->GetChangeDue()));
+	return FString::Printf(TEXT("[E / Click] Add a %s to the change   |   [Wheel] take the last one back\nGiving %s of %s due"),
+		Def.Name, *TSSMoney::Format(R->GetChangeGiven()), *TSSMoney::Format(R->GetChangeDue()));
 }
 
 void ATSSCashDrawer::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 {
 	ATSSRegister* R = GetRegister();
 	if (!R || !IsOpen() || R->GetPhase() != ETSSCheckoutPhase::CashDue) return;
-	R->AddChange(TSSMoney::Denoms[StackAt(Hit)]);
+	R->AddChange(SlotAt(Hit));
 }
 
 void ATSSCashDrawer::Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Direction)
@@ -250,9 +328,9 @@ void ATSSCashDrawer::Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 
 	if (ATSSRegister* R = GetRegister()) R->RemoveLastChange();
 }
 
-void ATSSCashDrawer::ClickDenom(int32 Denom)
+void ATSSCashDrawer::ClickPiece(int32 Piece)
 {
-	if (ATSSRegister* R = GetRegister()) if (IsOpen()) R->AddChange(Denom);
+	if (ATSSRegister* R = GetRegister()) if (IsOpen()) R->AddChange(Piece);
 }
 
 // ---- card terminal --------------------------------------------------------------------------------
@@ -314,7 +392,8 @@ void ATSSCardTerminal::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 namespace
 {
 	const FVector PrinterPos(28.f, -122.f, DevTop);
-	constexpr float PaperLength = 26.f;
+constexpr float PaperLength = 30.f;
+	constexpr float PaperWidth = 15.f;
 }
 
 ATSSReceiptPrinter::ATSSReceiptPrinter()
@@ -323,18 +402,33 @@ ATSSReceiptPrinter::ATSSReceiptPrinter()
 	Box(TEXT("Body"), PrinterPos + FVector(0.f, 0.f, 6.f), FVector(14.f, 16.f, 12.f), DevDark);
 	Box(TEXT("Slot"), PrinterPos + FVector(0.f, 0.f, 12.2f), FVector(2.f, 9.f, 0.6f), FLinearColor(0.f, 0.f, 0.f));
 	Box(TEXT("Led"), PrinterPos + FVector(7.2f, 5.f, 8.f), FVector(0.6f, 1.5f, 1.5f), FLinearColor(0.1f, 0.9f, 0.3f));
-	Paper = Box(TEXT("Paper"), PrinterPos + FVector(0.f, 0.f, 12.f), FVector(0.3f, 8.f, 0.1f), FLinearColor(0.97f, 0.97f, 0.94f));
+Paper = Box(TEXT("Paper"), PrinterPos + FVector(0.f, 0.f, 12.f), FVector(0.3f, PaperWidth, 0.1f), FLinearColor(0.97f, 0.97f, 0.94f));
 	Paper->SetVisibility(false);
-	PaperText = Label(TEXT("PaperText"), PrinterPos + FVector(0.5f, 0.f, 12.f + PaperLength * 0.5f), FRotator::ZeroRotator, 1.5f, FColor(20, 20, 20));
+	PaperText = Label(TEXT("PaperText"), PrinterPos + FVector(0.5f, 0.f, 12.f + PaperLength * 0.5f),FRotator::ZeroRotator, 0.9f, FColor(20, 20, 20));
 	PaperText->SetVisibility(false);
 }
 
-void ATSSReceiptPrinter::Print(const FTSSTransaction& Sale)
+void ATSSReceiptPrinter::Print(const FTSSTransaction& Sale, const TArray<FTSSSaleLine>& Lines)
 {
-	FString Text = TEXT("TECH STORE\n----------\n");
-	Text += FString::Printf(TEXT("%d item%s\n"), Sale.Items, Sale.Items == 1 ? TEXT("") : TEXT("s"));
-	Text += FString::Printf(TEXT("Subtotal $%d\nTax $%d\nTOTAL $%d\n"), Sale.Subtotal, Sale.Tax, Sale.Total);
-	Text += Sale.Method == ETSSPayMethod::Cash ? FString::Printf(TEXT("CASH $%d\nChange $%d"), Sale.CashReceived, Sale.Change) : FString(TEXT("CARD"));
+	auto Money = [](int32 Cents) { return TSSMoney::Format(Cents); };
+	auto Pad = [](const FString& Left, const FString& Right) { return Left + TEXT("   ") + Right; };
+	FString Text = TEXT("TECH STORE\n100 Commerce Way\nHarbor City\n--------------------\n");
+	Text += FString::Printf(TEXT("%s  %s\nTrans #%d\n--------------------\n"), *UTSSBusinessSubsystem::FormatDate(Sale.Day), *UTSSBusinessSubsystem::FormatClock(Sale.TimeMinutes / 60.f), Sale.Id);
+	for (const FTSSSaleLine& L : Lines) Text += Pad(FString::Printf(TEXT("%dx %s"), L.Qty, TSSProductDef(L.Product).Name), Money(L.Total() * 100)) + TEXT("\n");
+	Text += TEXT("--------------------\n");
+	Text += Pad(TEXT("Subtotal"), Money(Sale.Subtotal)) + TEXT("\n");
+	Text += Pad(FString::Printf(TEXT("Tax %.2f%%"), TSSMoney::TaxRate * 100.f), Money(Sale.Tax)) + TEXT("\n");
+	Text += Pad(TEXT("TOTAL"), Money(Sale.Total)) + TEXT("\n--------------------\n");
+	if (Sale.Method == ETSSPayMethod::Cash)
+	{
+		Text += Pad(TEXT("CASH"), Money(Sale.CashReceived)) + TEXT("\n");
+		Text += Pad(TEXT("CHANGE"), Money(Sale.Change)) + TEXT("\n");
+	}
+	else
+	{
+		Text += FString::Printf(TEXT("%s DEBIT  ****%s\nAUTH %s\nAPPROVED  %s\n"), *Sale.CardNetwork, *Sale.CardLast4, *Sale.AuthCode, *Money(Sale.Total));
+	}
+	Text += TEXT("\nTHANK YOU!\nKeep this receipt for returns");
 	PaperText->SetText(FText::FromString(Text));
 	bPrinting = true;
 	PrintAlpha = 0.f;
@@ -357,7 +451,7 @@ void ATSSReceiptPrinter::Tick(float Dt)
 	PrintAlpha = FMath::Min(1.f, PrintAlpha + Dt / 1.6f);
 	// The paper grows upward out of the slot.
 	const float L = FMath::Max(0.1f, PaperLength * PrintAlpha);
-	Paper->SetRelativeScale3D(FVector(0.003f, 0.08f, L / 100.f));
+Paper->SetRelativeScale3D(FVector(0.003f, PaperWidth / 100.f, L / 100.f));
 	Paper->SetRelativeLocation(PrinterPos + FVector(0.f, 0.f, 12.f + L * 0.5f));
 	PaperText->SetRelativeLocation(PrinterPos + FVector(0.5f, 0.f, 12.f + L * 0.5f));
 }

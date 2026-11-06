@@ -141,8 +141,10 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 		Focus = nullptr;
 		FocusPrompt.Reset();
 		Human->SetSpeed(0.f);
+		ActiveFor = 0.f;
 		return;
 	}
+	ActiveFor += DeltaSeconds;
 
 	FKey SprintKey = EKeys::LeftShift;
 	if (const UGameInstance* GI = GetGameInstance())
@@ -160,6 +162,8 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 	if (Focus && !bMoving)
 	{
 		if (!Focus->IsMovable() && PC->WasInputKeyJustPressed(EKeys::E)) InteractWith(Focus, FocusHit);
+		// Left click does what a tap of E does, on anything (a click never starts a move: that stays a hold of E).
+		if (ActiveFor > 0.3f && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton)) InteractWith(Focus, FocusHit);
 		if (PC->WasInputKeyJustPressed(EKeys::MouseScrollUp) || PC->WasInputKeyJustPressed(EKeys::RightBracket)) Focus->Adjust(this, FocusHit, +1);
 		if (PC->WasInputKeyJustPressed(EKeys::MouseScrollDown) || PC->WasInputKeyJustPressed(EKeys::LeftBracket)) Focus->Adjust(this, FocusHit, -1);
 	}

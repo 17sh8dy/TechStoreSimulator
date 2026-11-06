@@ -21,18 +21,28 @@ class UTSSStoreSubsystem : public UWorldSubsystem
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
-	int32 GetMoney() const { return Money; }
-	bool TrySpend(int32 Amount);
-	void Earn(int32 Amount);
+	/** Cash in the shop, in whole dollars (cents dropped): what most screens show. */
+	int32 GetMoney() const { return MoneyCents / 100; }
+	/** Exact cash, in cents. */
+	int32 GetMoneyCents() const { return MoneyCents; }
+	/** Spending and earning in whole dollars (orders, upgrades, wages...) or exact cents (the register). */
+	bool TrySpend(int32 Dollars) { return TrySpendCents(Dollars * 100); }
+	void Earn(int32 Dollars) { EarnCents(Dollars * 100); }
+	bool TrySpendCents(int32 Cents);
+	void EarnCents(int32 Cents);
 
 	int32 GetPrice(ETSSProduct Product) const { return Prices[static_cast<int32>(Product)]; }
 	void SetPrice(ETSSProduct Product, int32 Price);
 
 	/** A finished checkout: the cash goes into the till and the sale is logged. */
 	void RecordSale(const FTSSTransaction& Sale);
-	int32 GetCashSales() const { return CashSales; }
-	int32 GetCardSales() const { return CardSales; }
-	int32 GetTaxCollected() const { return TaxCollected; }
+	/** Sales takings including tax, split by how they were paid. Whole dollars, or exact cents. */
+	int32 GetCashSales() const { return CashSales / 100; }
+	int32 GetCardSales() const { return CardSales / 100; }
+	int32 GetTaxCollected() const { return TaxCollected / 100; }
+	int32 GetCashSalesCents() const { return CashSales; }
+	int32 GetCardSalesCents() const { return CardSales; }
+	int32 GetTaxCollectedCents() const { return TaxCollected; }
 	const TArray<FTSSTransaction>& GetTransactions() const { return Transactions; }
 	/** A customer left without buying (too expensive, out of stock, or tired of waiting). */
 	void RecordWalkout();
@@ -49,8 +59,10 @@ public:
 
 	// ---- business statistics (every StoreDesk number comes from here) -----------------------------
 	/** Revenue is the pre-tax amount of finished sales. */
-	int32 GetLifetimeRevenue() const { return LifetimeRevenue; }
-	int32 GetTodayRevenue() const { return TodayRevenue; }
+	int32 GetLifetimeRevenue() const { return LifetimeRevenue / 100; }
+	int32 GetTodayRevenue() const { return TodayRevenue / 100; }
+	int32 GetLifetimeRevenueCents() const { return LifetimeRevenue; }
+	int32 GetTodayRevenueCents() const { return TodayRevenue; }
 	int32 GetProductsSold() const { return ProductsSold; }
 	int32 GetDay() const { return Day; }
 	int32 GetOrderSpend() const { return OrderSpend; }
@@ -73,8 +85,8 @@ public:
 	FTSSSaleRecorded OnSale;
 
 private:
-	int32 Money = 1000;
-	int32 Served = 0;
+	int32 MoneyCents = 100000;
+int32 Served = 0;
 	int32 CashSales = 0;
 	int32 CardSales = 0;
 	int32 TaxCollected = 0;

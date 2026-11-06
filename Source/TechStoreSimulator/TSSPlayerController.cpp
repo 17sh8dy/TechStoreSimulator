@@ -270,7 +270,7 @@ void ATSSPlayerController::TSSSelfTest()
 	Load(ETSSProduct::Phone);
 	Shelf->Interact(Me, Hit);
 	Check(TEXT("placing empties the hands"), Me->GetHeld() == ETSSProduct::None);
-	Check(TEXT("prompt on a stocked slot offers Take"), Shelf->GetPrompt(Me, Hit).Contains(TEXT("[E] Take Smartphone")));
+	Check(TEXT("prompt on a stocked slot offers Take"), Shelf->GetPrompt(Me, Hit).Contains(TEXT("[E / Click] Take Smartphone")));
 
 	Shelf->Interact(Me, Hit);
 	Check(TEXT("taking returns the phone to the hands"), Me->GetHeld() == ETSSProduct::Phone);
@@ -555,7 +555,39 @@ void ATSSPlayerController::TSSSelfTest()
 			Cfg->SetSprintKey(Original, false);   // session-only: the test never rewrites the player's saved settings
 		}
 	}
-	Check(TEXT("sprinting is clearly faster than walking"), ATSSCharacter::SpeedFor(true) >= ATSSCharacter::SpeedFor(false) * 1.8f);
+Check(TEXT("sprinting is clearly faster than walking"), ATSSCharacter::SpeedFor(true) >= ATSSCharacter::SpeedFor(false) * 1.8f);
+
+	// ---- US money ----
+	Check(TEXT("money is formatted with cents and thousands separators"), TSSMoney::Format(123456) == TEXT("$1,234.56") && TSSMoney::Format(5) == TEXT("$0.05") && TSSMoney::Format(-150) == TEXT("-$1.50"));
+	Check(TEXT("whole-dollar amounts print short"), TSSMoney::FormatShort(2000) == TEXT("$20") && TSSMoney::FormatShort(2050) == TEXT("$20.50"));
+	Check(TEXT("sales tax is 8% rounded to the cent"), TSSMoney::TaxFor(41900) == 3352 && TSSMoney::TaxFor(999) == 80 && TSSMoney::TaxFor(0) == 0);
+	Check(TEXT("there are six notes and five coins with the real US values"),
+		TSSMoney::NumBills == 6 && TSSMoney::Denom(0).Cents == 100 && TSSMoney::Denom(5).Cents == 10000 && TSSMoney::Denom(6).Cents == 1 && TSSMoney::Denom(9).Cents == 25 && TSSMoney::Denom(10).bCoin);
+	Check(TEXT("a note is found before a coin of the same value"), TSSMoney::IndexOf(100) == 0 && TSSMoney::IndexOfCoin(100) == 10 && TSSMoney::IndexOf(25) == 9);
+	{
+		bool bChangeOk = true, bTenderOk = true;
+		const TSSMoney::FStock Float = TSSMoney::StartingFloat();
+		for (int32 Cents = 0; Cents <= 20000 && bChangeOk; Cents += 37)
+		{
+			TArray<int32> Pieces;
+			if (!TSSMoney::MakeChange(Cents, Float, Pieces) || TSSMoney::Sum(Pieces) != Cents) bChangeOk = false;
+		}
+		Check(TEXT("the starting float can make change for any amount up to $200, to the cent"), bChangeOk);
+		TArray<int32> Out;
+		TSSMoney::FStock Empty;
+		Check(TEXT("an empty drawer cannot make change, and says so"), !TSSMoney::MakeChange(5, Empty, Out) && Out.Num() == 0);
+		TSSMoney::FStock OnlyTens; OnlyTens.Count[2] = 3;
+		Check(TEXT("a drawer without the right pieces refuses rather than short-changing"), !TSSMoney::MakeChange(1500, OnlyTens, Out) && TSSMoney::MakeChange(2000, OnlyTens, Out) && Out.Num() == 2);
+		for (int32 Trial = 0; Trial < 400; ++Trial)
+		{
+			const int32 Total = FMath::RandRange(1, 250000);
+			const TArray<int32> Tender = TSSMoney::ChooseTender(Total);
+			const int32 Paid = TSSMoney::Sum(Tender);
+			if (Paid < Total || Paid > Total + 20000 + Total) bTenderOk = false;
+			for (int32 P : Tender) if (P == 10) bTenderOk = false;   // nobody pays in dollar coins
+		}
+		Check(TEXT("customers always hand over enough, and never a silly overpayment"), bTenderOk);
+	}
 
 	UE_LOG(LogTemp, Display, TEXT("TSSTEST DONE fails=%d"), Fails);
 }
@@ -606,6 +638,7 @@ void ATSSPlayerController::TSSCustomerTest()
 		int32 Fails = 0;
 		bool BagSeen = false, StrayPanel = false;
 		bool CashierShot = false;
+		int32 Drawer0 = 0, TenderSum = 0;
 TMap<ETSSProduct, int32> OldPrices;
 	};
 	TSharedRef<FState> St = MakeShared<FState>();
@@ -637,8 +670,8 @@ TMap<ETSSProduct, int32> OldPrices;
 	auto Spawn = [this, St, CS, Store](ETSSPayMethod Method)
 	{
 		St->Step = 0; St->Elapsed = 0.f; St->Hold = 0.f;
-		St->Money0 = Store->GetMoney(); St->Served0 = Store->GetServed(); St->Lost0 = Store->GetLost();
-		St->Cash0 = Store->GetCashSales(); St->Card0 = Store->GetCardSales(); St->Tax0 = Store->GetTaxCollected();
+St->Money0 = Store->GetMoneyCents(); St->Served0 = Store->GetServed(); St->Lost0 = Store->GetLost();
+St->Cash0 = Store->GetCashSalesCents(); St->Card0 = Store->GetCardSalesCents(); St->Tax0 = Store->GetTaxCollectedCents();
 		St->Txns0 = Store->GetTransactions().Num();
 		ATSSCustomer* C = CS->SpawnCustomer(8.f);
 		St->Customer = C;
@@ -689,7 +722,7 @@ TMap<ETSSProduct, int32> OldPrices;
 					const TArray<TObjectPtr<ATSSProductItem>>& Items = Reg->GetItems();
 					Check(TEXT("the basket is on the counter as real product items"), Items.Num() >= 1);
 					St->ExpectedSub = 0;
-					for (ATSSProductItem* I : Items) St->ExpectedSub += I->UnitPrice;
+for (ATSSProductItem* I : Items) St->ExpectedSub += I->UnitPrice * 100;   // the register counts cents
 
 					Reg->GetKeyboard()->Interact(Me, FHitResult());
 					Check(TEXT("charging is refused while items are unscanned"), Reg->GetPhase() == ETSSCheckoutPhase::Scanning);
@@ -706,7 +739,7 @@ TMap<ETSSProduct, int32> OldPrices;
 					}
 					Check(TEXT("subtotal is the sum of the shelf prices"), Reg->GetSubtotal() == St->ExpectedSub);
 					Check(TEXT("tax is 8% and total = subtotal + tax"), Reg->GetTax() == TSSMoney::TaxFor(St->ExpectedSub) && Reg->GetTotal() == St->ExpectedSub + Reg->GetTax());
-					Check(TEXT("monitor lines add up to the subtotal"), [&]() { int32 S = 0; for (const FTSSSaleLine& L : Reg->GetLines()) S += L.Total(); return S == Reg->GetSubtotal(); }());
+					Check(TEXT("monitor lines add up to the subtotal"), [&]() { int32 S = 0;for (const FTSSSaleLine& L : Reg->GetLines()) S += L.Total() * 100; return S == Reg->GetSubtotal(); }());
 					St->ExpectedTotal = Reg->GetTotal();
 					Snap(FVector(95.f, 70.f, 0.f), FVector(-24.f, 70.f, ATSSRegister::TopZ + 12.f));
 					St->Hold = 1.4f;
@@ -729,12 +762,18 @@ TMap<ETSSProduct, int32> OldPrices;
 						Reg->GetKeyboard()->Interact(Me, FHitResult());
 						Check(TEXT("confirming with no change given is rejected"), Reg->GetPhase() == ETSSCheckoutPhase::CashDue);
 					}
-					int32 Left = Reg->GetChangeDue();
-					for (int32 d = TSSMoney::NumDenoms - 1; d >= 0; --d)
-					{
-						while (Left >= TSSMoney::Denoms[d]) { Reg->GetDrawer()->ClickDenom(TSSMoney::Denoms[d]); Left -= TSSMoney::Denoms[d]; }
-					}
-					Check(TEXT("bills clicked out of the drawer add up to the change due"), Reg->GetChangeGiven() == Reg->GetChangeDue());
+Check(TEXT("the customer paid in real notes and coins that add up to what they handed over"), Reg->GetTender().Num() > 0 && TSSMoney::Sum(Reg->GetTender()) == Reg->GetCashReceived());
+Check(TEXT("the notes and coins are on the counter"), Reg->GetTender().Num() > 0);
+{
+	TArray<int32> Pieces;
+	const int32 DrawerBefore = Reg->GetDrawer()->GetCashOnHandCents();
+	Check(TEXT("the drawer can make the change from the notes and coins it holds"), TSSMoney::MakeChange(Reg->GetChangeDue(), Reg->GetDrawer()->GetStock(), Pieces));
+	for (int32 P : Pieces) Reg->GetDrawer()->ClickPiece(P);
+	Check(TEXT("pieces clicked out of the drawer add up to the change due, to the cent"), Reg->GetChangeGiven() == Reg->GetChangeDue());
+	Check(TEXT("and they have left the drawer"), Reg->GetDrawer()->GetCashOnHandCents() == DrawerBefore - Reg->GetChangeDue());
+	St->Drawer0 = Reg->GetDrawer()->GetCashOnHandCents();
+	St->TenderSum = Reg->GetCashReceived();
+}
 					Snap(FVector(115.f, -85.f, 0.f), FVector(54.f, -85.f, 90.f));
 					St->Hold = 1.4f;
 					St->Step = 3; St->Elapsed = 0.f;
@@ -762,12 +801,13 @@ TMap<ETSSProduct, int32> OldPrices;
 				break;
 			case 4: // sale recorded, receipt printed
 				if (Reg->GetPhase() != ETSSCheckoutPhase::Receipt) { if (bTimeout) Fail(TEXT("payment completed and a receipt printed")); return; }
-				Check(TEXT("the store's money went up by exactly the total"), Store->GetMoney() == St->Money0 + St->ExpectedTotal);
+Check(TEXT("the store's money went up by exactly the total, to the cent"), Store->GetMoneyCents() == St->Money0 + St->ExpectedTotal);
+					if (bCash) Check(TEXT("the customer's notes and coins went into the drawer"), Reg->GetDrawer()->GetCashOnHandCents() == St->Drawer0 + St->TenderSum);
 				Check(TEXT("served counter and transaction log updated"), Store->GetServed() == St->Served0 + 1 && Store->GetTransactions().Num() == St->Txns0 + 1);
 				Check(TEXT("sale recorded under the right payment method"),
-					bCash ? (Store->GetCashSales() == St->Cash0 + St->ExpectedTotal && Store->GetCardSales() == St->Card0)
-					      : (Store->GetCardSales() == St->Card0 + St->ExpectedTotal && Store->GetCashSales() == St->Cash0));
-				Check(TEXT("tax collected is recorded"), Store->GetTaxCollected() == St->Tax0 + TSSMoney::TaxFor(St->ExpectedSub));
+					bCash ?(Store->GetCashSalesCents() == St->Cash0 + St->ExpectedTotal && Store->GetCardSalesCents() == St->Card0)
+					      :(Store->GetCardSalesCents() == St->Card0 + St->ExpectedTotal && Store->GetCashSalesCents() == St->Cash0));
+				Check(TEXT("tax collected is recorded"),Store->GetTaxCollectedCents() == St->Tax0 + TSSMoney::TaxFor(St->ExpectedSub));
 				Check(TEXT("the receipt printer has a receipt"), Reg->GetPrinter()->HasReceipt());
 				St->Hold = 2.0f; // let the receipt finish printing
 				St->Step = 5; St->Elapsed = 0.f;
@@ -839,7 +879,7 @@ if (!St->Customer.IsValid())
 				{
 					UTSSBusinessSubsystem* Biz4 = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>();
 					Check(TEXT("a hired cashier completed the whole sale on their own"), Store->GetServed() == St->Served0 + 1 && Store->GetTransactions().Num() == St->Txns0 + 1);
-					Check(TEXT("and the money went into the till"), Store->GetMoney() > St->Money0);
+Check(TEXT("and the money went into the till"), Store->GetMoneyCents() > St->Money0);
 					Check(TEXT("the cashier left the register free for the next customer"), Reg->GetPhase() == ETSSCheckoutPhase::Idle && Reg->GetItems().Num() == 0);
 					bool bBody = false;
 					for (TActorIterator<ATSSEmployee> EIt(GetWorld()); EIt; ++EIt) bBody = true;
@@ -929,7 +969,7 @@ void ATSSPlayerController::TSSDeskTest()
 		int32 SumSub = 0, SumItems = 0;
 		for (const FTSSTransaction& T : Store->GetTransactions()) { SumSub += T.Subtotal; SumItems += T.Items; }
 		Check(TEXT("dashboard money = the store's money"), D.Money == Store->GetMoney());
-		Check(TEXT("lifetime revenue = sum of the logged sales (and not zero)"), D.LifetimeRevenue == SumSub && SumSub > 0);
+		Check(TEXT("lifetime revenue = sum of the logged sales (and not zero)"), D.LifetimeRevenue == SumSub / 100 && Store->GetLifetimeRevenueCents() == SumSub && SumSub > 0);
 		Check(TEXT("products sold = items in the logged sales"), D.ProductsSold == SumItems && SumItems > 0);
 		Check(TEXT("customers served = logged sales"), D.CustomersServed == Store->GetTransactions().Num());
 		Check(TEXT("today's revenue is real and within lifetime revenue"), D.TodayRevenue > 0 && D.TodayRevenue <= D.LifetimeRevenue);
@@ -1078,7 +1118,7 @@ void ATSSPlayerController::TSSDeskTest()
 			Check(TEXT("the business was written to a save file"), Save != nullptr);
 			if (Save)
 			{
-				Check(TEXT("the save holds the money, revenue and customers"), Save->Money == Store->GetMoney() && Save->LifetimeRevenue == Store->GetLifetimeRevenue() && Save->Served == Store->GetServed() && Save->ProductsSold == Store->GetProductsSold());
+				Check(TEXT("the save holds the money, revenue and customers"),Save->Money == Store->GetMoneyCents() && Save->LifetimeRevenue == Store->GetLifetimeRevenueCents() && Save->Served == Store->GetServed() && Save->ProductsSold == Store->GetProductsSold());
 				Check(TEXT("the save holds XP, upgrades, orders and achievements"), Save->XP == Biz->GetXP() && Save->Upgrades.Contains(FName(TEXT("shelf_1"))) && Save->Orders.Num() == Biz->GetOrders().Num() && Save->Achievements.Contains(FName(TEXT("first_delivery"))));
 				Check(TEXT("the save holds the sales log"), Save->Transactions.Num() == Store->GetTransactions().Num());
 					// Shelf stock: every shelf is in the save with the quantities it really holds, and prices are saved too.

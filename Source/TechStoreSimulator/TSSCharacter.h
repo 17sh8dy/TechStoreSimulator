@@ -61,7 +61,9 @@ private:
 
 	ETSSProduct Held = ETSSProduct::None;
 	float GestureTimer = 0.f;
-	bool bFirstPersonView = true;
+	/** Seconds the game has been in control since the last menu / StoreDesk (a click that closed one must not also act in the shop). */
+	float ActiveFor = 0.f;
+bool bFirstPersonView = true;
 	UPROPERTY() TObjectPtr<ATSSProductItem> HeldItem;
 	UPROPERTY() TObjectPtr<ATSSInteractable> Focus;
 	FHitResult FocusHit;

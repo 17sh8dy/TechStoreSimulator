@@ -5,6 +5,7 @@
 #include "TSSRegisterDevice.h"
 #include "TSSStoreSubsystem.h"
 #include "TSSBusinessSubsystem.h"
+#include "TSSMoneyVisual.h"
 #include "Components/ChildActorComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -39,15 +40,21 @@ ATSSRegister::ATSSRegister()
 	Add(TEXT("PanelTrim"), FVector(-34.5f, 0.f, 82.f), FVector(1.f, 230.f, 4.f), FLinearColor(0.95f, 0.95f, 1.f));
 
 	// The customer's cash, lying on the counter while it is being counted.
-	CashPile = Add(TEXT("CashPile"), FVector(4.f, 95.f, TopZ + 1.5f), FVector(16.f, 7.f, 3.f), FLinearColor(0.25f, 0.6f, 0.3f));
+CashPile = Add(TEXT("CashPile"), FVector(6.f, 76.f, TopZ + 1.5f), FVector(2.f, 2.f, 2.f), FLinearColor(0.25f, 0.6f, 0.3f));
 	CashPile->SetVisibility(false);
 	CashText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("CashText"));
 	CashText->SetupAttachment(Root);
-	CashText->SetRelativeLocation(FVector(4.f, 95.f, TopZ + 12.f));
+CashText->SetRelativeLocation(FVector(6.f, 76.f, TopZ + 14.f));
 	CashText->SetWorldSize(7.f);
 	CashText->SetHorizontalAlignment(EHTA_Center);
 	CashText->SetTextRenderColor(FColor(120, 255, 150));
 	CashText->SetVisibility(false);
+	TenderLayer = CreateDefaultSubobject<UTSSMoneyLayer>(TEXT("TenderLayer"));
+	TenderLayer->SetupAttachment(Root);
+	TenderLayer->SetRelativeLocation(FVector(6.f, 56.f, TopZ));
+	ChangeLayer = CreateDefaultSubobject<UTSSMoneyLayer>(TEXT("ChangeLayer"));
+	ChangeLayer->SetupAttachment(Root);
+	ChangeLayer->SetRelativeLocation(FVector(26.f, 8.f, TopZ));
 
 	// The devices: each is its own actor with its own behaviour.
 	MonitorComp = CreateDefaultSubobject<UChildActorComponent>(TEXT("MonitorComp"));
@@ -136,7 +143,7 @@ void ATSSRegister::SetNotice(const FString& Text, float Seconds)
 void ATSSRegister::RecalculateTotals()
 {
 	Subtotal = 0;
-	for (const FTSSSaleLine& L : Lines) Subtotal += L.Total();
+	for (const FTSSSaleLine& L : Lines) Subtotal += L.Total() * 100;   // prices are whole dollars; the register counts cents
 	Tax = TSSMoney::TaxFor(Subtotal);
 	Total = Subtotal + Tax;
 }
@@ -150,9 +157,21 @@ int32 ATSSRegister::ItemsLeftToScan() const
 
 int32 ATSSRegister::GetChangeGiven() const
 {
-	int32 S = 0;
-	for (int32 B : ChangeBills) S += B;
-	return S;
+	return TSSMoney::Sum(ChangeBills);
+}
+
+void ATSSRegister::ReleaseChange()
+{
+	if (ATSSCashDrawer* D = GetDrawer()) for (int32 P : ChangeBills) D->ReturnPiece(P);
+	ChangeBills.Reset();
+}
+
+void ATSSRegister::ShowMoney()
+{
+	TenderLayer->SetPieces(Tender);
+	ChangeLayer->SetPieces(ChangeBills);
+	CashText->SetVisibility(Tender.Num() > 0);
+	CashText->SetText(FText::FromString(TSSMoney::Format(CashReceived)));
 }
 
 void ATSSRegister::BeginTransaction(ATSSCustomer* Who, const TArray<FTSSBasketItem>& Basket)
@@ -196,6 +215,8 @@ FVector ATSSRegister::TerminalTapPoint() const
 
 void ATSSRegister::Reset()
 {
+	ReleaseChange();
+	Tender.Reset();
 	for (ATSSProductItem* I : Items) if (I) I->Destroy();
 	Items.Reset();
 	Lines.Reset();
@@ -204,7 +225,7 @@ void ATSSRegister::Reset()
 	Method = ETSSPayMethod::None;
 	bCardApproved = false;
 	CashPile->SetVisibility(false);
-	CashText->SetVisibility(false);
+	ShowMoney();
 }
 
 bool ATSSRegister::ScanItem(ATSSProductItem* Item, FString& Why)
@@ -246,7 +267,7 @@ FString ATSSRegister::ScannerPrompt(const ATSSCharacter* Player) const
 	if (Phase != ETSSCheckoutPhase::Scanning) return TEXT("Barcode scanner");
 	if (const ATSSProductItem* I = Player->GetHeldItem())
 	{
-		return I->bScanned ? FString(TEXT("Already scanned")) : FString::Printf(TEXT("[E] Scan %s  ($%d)"), TSSProductDef(I->Product).Name, I->UnitPrice);
+		return I->bScanned ? FString(TEXT("Already scanned")) : FString::Printf(TEXT("[E / Click] Scan %s  ($%d)"), TSSProductDef(I->Product).Name, I->UnitPrice);
 	}
 	return TEXT("Hold an item here to scan it");
 }
@@ -259,11 +280,11 @@ FString ATSSRegister::KeyboardPrompt() const
 	case ETSSCheckoutPhase::Scanning:
 	{
 		const int32 Left = ItemsLeftToScan();
-		return Left > 0 ? FString::Printf(TEXT("Scan all items first  (%d left)"), Left) : FString::Printf(TEXT("[E] Charge  $%d"), Total);
+		return Left > 0 ? FString::Printf(TEXT("Scan all items first  (%d left)"), Left) :FString::Printf(TEXT("[E / Click] Charge  %s"), *TSSMoney::Format(Total));
 	}
 	case ETSSCheckoutPhase::WaitingForPayment: return TEXT("Waiting for the customer to pay...");
 	case ETSSCheckoutPhase::CashDue:
-		return FString::Printf(TEXT("[E] Confirm change\nGiving $%d of $%d due"), GetChangeGiven(), ChangeDue);
+		return FString::Printf(TEXT("[E / Click] Confirm change\nGiving %s of %s due"), *TSSMoney::Format(GetChangeGiven()), *TSSMoney::Format(ChangeDue));
 	case ETSSCheckoutPhase::Receipt: return TEXT("Hand over the receipt");
 	case ETSSCheckoutPhase::Collecting: return TEXT("The customer is collecting their shopping");
 	default: return TEXT("Waiting for the card payment...");
@@ -275,7 +296,7 @@ void ATSSRegister::KeyboardPress()
 	if (Phase == ETSSCheckoutPhase::Scanning && Items.Num() > 0 && ItemsLeftToScan() == 0)
 	{
 		Phase = ETSSCheckoutPhase::WaitingForPayment;
-		SetNotice(FString::Printf(TEXT("Total $%d  -  waiting for payment"), Total), 6.f);
+		SetNotice(FString::Printf(TEXT("Total %s  -  waiting for payment"), *TSSMoney::Format(Total)), 6.f);
 		if (Customer) Customer->PayNow(false);
 	}
 	else if (Phase == ETSSCheckoutPhase::CashDue)
@@ -286,35 +307,50 @@ void ATSSRegister::KeyboardPress()
 
 // ---- cash -----------------------------------------------------------------------------------------
 
-void ATSSRegister::CustomerPaysCash(int32 Amount)
+void ATSSRegister::CustomerPaysCash(const TArray<int32>& Pieces)
 {
 	Phase = ETSSCheckoutPhase::CashDue;
 	Method = ETSSPayMethod::Cash;
-	CashReceived = Amount;
-	ChangeDue = Amount - Total;
-	ChangeBills.Reset();
-	CashPile->SetVisibility(true);
-	CashText->SetVisibility(true);
-	CashText->SetText(FText::FromString(FString::Printf(TEXT("$%d"), Amount)));
-	if (ATSSCashDrawer* D = GetDrawer()) D->SetOpen(true);
-	SetNotice(ChangeDue > 0 ? FString::Printf(TEXT("Give $%d change"), ChangeDue) : FString(TEXT("Exact amount - confirm")), 6.f);
+	Tender = Pieces;
+	CashReceived = TSSMoney::Sum(Pieces);
+	ChangeDue = CashReceived - Total;
+	ReleaseChange();
+	bool bBank = false;
+	if (ATSSCashDrawer* D = GetDrawer())
+	{
+		D->SetOpen(true);
+		// If the drawer cannot make this change (a $100 note for a small sale and no small notes left), the owner
+		// pops next door to the bank and comes back with a fresh float.
+		TArray<int32> Probe;
+		if (ChangeDue > 0 && !TSSMoney::MakeChange(ChangeDue, D->GetStock(), Probe)) { D->RefillFloat(); bBank = true; }
+	}
+	ShowMoney();
+	if (bBank) SetNotice(TEXT("Short of change: you topped the drawer up from the bank"), 5.f);
+	else SetNotice(ChangeDue > 0 ? FString::Printf(TEXT("Give %s change"), *TSSMoney::Format(ChangeDue)) : FString(TEXT("Exact amount - confirm")), 6.f);
 }
 
-void ATSSRegister::AddChange(int32 Denom)
+bool ATSSRegister::AddChange(int32 Piece)
 {
-	if (Phase != ETSSCheckoutPhase::CashDue) return;
-	ChangeBills.Add(Denom);
+	if (Phase != ETSSCheckoutPhase::CashDue) return false;
+	ATSSCashDrawer* D = GetDrawer();
+	if (!D || !D->TakePiece(Piece)) { SetNotice(FString::Printf(TEXT("The drawer is out of %s"), TSSMoney::Denom(Piece).Name), 2.5f); return false; }
+	ChangeBills.Add(Piece);
+	ShowMoney();
+	return true;
 }
 
 void ATSSRegister::RemoveLastChange()
 {
-	if (Phase == ETSSCheckoutPhase::CashDue && ChangeBills.Num() > 0) ChangeBills.Pop();
+	if (Phase != ETSSCheckoutPhase::CashDue || ChangeBills.Num() == 0) return;
+	if (ATSSCashDrawer* D = GetDrawer()) D->ReturnPiece(ChangeBills.Last());
+	ChangeBills.Pop();
+	ShowMoney();
 }
 
 FString ATSSRegister::DrawerPrompt() const
 {
 	if (Phase != ETSSCheckoutPhase::CashDue) return TEXT("Cash drawer");
-	return FString::Printf(TEXT("[E] Add this bill to the change   |   [Wheel] take the last one back\nGiving $%d of $%d"), GetChangeGiven(), ChangeDue);
+	return FString::Printf(TEXT("[E / Click] Add this bill to the change   |   [Wheel] take the last one back\nGiving $%d of $%d"), GetChangeGiven(), ChangeDue);
 }
 
 void ATSSRegister::ConfirmChange()
@@ -326,7 +362,8 @@ void ATSSRegister::ConfirmChange()
 	}
 	// Wrong change: the customer sends it back and the tray is cleared.
 	SetNotice(GetChangeGiven() < ChangeDue ? TEXT("Not enough change!") : TEXT("Too much change!"), 3.f);
-	ChangeBills.Reset();
+	ReleaseChange();
+	ShowMoney();
 	if (Customer) Customer->Complain(TEXT("That's not the right change!"));
 }
 
@@ -349,7 +386,7 @@ void ATSSRegister::ProcessCard()
 
 FString ATSSRegister::TerminalPrompt() const
 {
-	if (Phase == ETSSCheckoutPhase::CardReady) return FString::Printf(TEXT("[E] Process card payment  ($%d)"), Total);
+	if (Phase == ETSSCheckoutPhase::CardReady) return FString::Printf(TEXT("[E / Click] Process card payment  (%s)"), *TSSMoney::Format(Total));
 	return TEXT("Card terminal");
 }
 
@@ -391,17 +428,23 @@ void ATSSRegister::Complete(ETSSPayMethod PaidBy)
 	T.Method = PaidBy;
 	T.CashReceived = PaidBy == ETSSPayMethod::Cash ? CashReceived : 0;
 	T.Change = PaidBy == ETSSPayMethod::Cash ? ChangeDue : 0;
+	if (const UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) T.TimeMinutes = FMath::FloorToInt(Biz->GetHour() * 60.f);
 	if (UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>()) Store->RecordSale(T);
 
 	if (ATSSCashDrawer* D = GetDrawer())
 	{
-		if (PaidBy == ETSSPayMethod::Cash) D->AddCash(CashReceived - ChangeDue);
+		if (PaidBy == ETSSPayMethod::Cash) D->Receive(Tender);   // the change was already counted out of the drawer
 		D->SetOpen(false);
 	}
-	CashPile->SetVisibility(false);
-	CashText->SetVisibility(false);
+	ChangeBills.Reset();   // handed to the customer
+	Tender.Reset();
+	ShowMoney();
 	LastTotal = Total;
-	if (ATSSReceiptPrinter* P = GetPrinter()) P->Print(T);
+if (ATSSReceiptPrinter* P = GetPrinter())
+	{
+		const UTSSStoreSubsystem* St = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
+		P->Print(St && St->GetTransactions().Num() > 0 ? St->GetTransactions().Last() : T, Lines);
+	}
 	if (Customer) Customer->Say(TEXT("Thank you!"), 3.f);
 	Phase = ETSSCheckoutPhase::Receipt;
 	PhaseTimer = 9.f; // handed over automatically if the owner is busy
@@ -410,7 +453,7 @@ void ATSSRegister::Complete(ETSSPayMethod PaidBy)
 
 FString ATSSRegister::PrinterPrompt() const
 {
-	return Phase == ETSSCheckoutPhase::Receipt ? FString(TEXT("[E] Hand the receipt to the customer")) : FString(TEXT("Receipt printer"));
+	return Phase == ETSSCheckoutPhase::Receipt ? FString(TEXT("[E / Click] Hand the receipt to the customer")) : FString(TEXT("Receipt printer"));
 }
 
 void ATSSRegister::TakeReceipt()
@@ -436,7 +479,7 @@ FString ATSSRegister::GetPrompt(const ATSSCharacter* Player, const FHitResult& H
 {
 	if (Player->GetHeldItem())
 	{
-		return Phase == ETSSCheckoutPhase::Scanning ? FString(TEXT("[E] Put the item down")) : FString(TEXT("Scan it, or put it down on the counter"));
+		return Phase == ETSSCheckoutPhase::Scanning ? FString(TEXT("[E / Click] Put the item down")) : FString(TEXT("Scan it, or put it down on the counter"));
 	}
 	return Phase == ETSSCheckoutPhase::Idle ? FString(TEXT("Checkout counter")) : FString();
 }
@@ -548,12 +591,12 @@ void ATSSRegister::RunCashier(float Dt)
 		break;
 	case ETSSCheckoutPhase::CashDue:
 	{
-		// Count out the change, biggest bills first, then confirm.
-		ChangeBills.Reset();
-		int32 Left = ChangeDue;
-		for (int32 d = TSSMoney::NumDenoms - 1; d >= 0; --d)
+		// Count out the change from what the drawer really holds, biggest pieces first, then confirm.
+		ReleaseChange();
+		TArray<int32> Pieces;
+		if (ATSSCashDrawer* D = GetDrawer())
 		{
-			while (Left >= TSSMoney::Denoms[d]) { ChangeBills.Add(TSSMoney::Denoms[d]); Left -= TSSMoney::Denoms[d]; }
+			if (TSSMoney::MakeChange(ChangeDue, D->GetStock(), Pieces)) for (int32 P : Pieces) AddChange(P);
 		}
 		ConfirmChange();
 		break;

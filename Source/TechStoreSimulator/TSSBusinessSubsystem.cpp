@@ -2,6 +2,7 @@
 #include "TSSDeliveryActors.h"
 #include "TSSEmployee.h"
 #include "TSSRegister.h"
+#include "TSSRegisterDevice.h"
 #include "TSSBusinessSave.h"
 #include "TSSInteractable.h"
 #include "TSSShelf.h"
@@ -238,7 +239,7 @@ void UTSSBusinessSubsystem::ApplyLayout()
 void UTSSBusinessSubsystem::HandleSale(const FTSSTransaction& Sale)
 {
 	// Experience: 5 per product sold plus a tenth of the takings.
-	XP += Sale.Items * 5 + Sale.Total / 10;
+XP += Sale.Items * 5 + Sale.Total / 1000;   // 5 per product plus a tenth of the takings (the total is in cents)
 	CheckAchievements();
 	SaveNow();
 	OnChanged.Broadcast();
@@ -327,7 +328,7 @@ void UTSSBusinessSubsystem::CheckAchievements()
 	if (GetLevel() >= 3) Unlock(TEXT("level_3"));
 	for (const FTSSTransaction& T : Store->GetTransactions())
 	{
-		if (T.Total >= 1000) { Unlock(TEXT("big_sale")); break; }
+if (T.Total >= 100000) { Unlock(TEXT("big_sale")); break; }
 	}
 	for (const FTSSOrder& O : Orders)
 	{
@@ -703,7 +704,9 @@ void UTSSBusinessSubsystem::Tick(float DeltaTime)
 		Store->StartDay(NewDay);
 		ExpireContracts();
 		PayWages();
-	}
+		// A trip to the bank every morning: any note or coin the drawer ran short of is topped back up to the float.
+		for (TActorIterator<ATSSRegister> RegIt(GetWorld()); RegIt; ++RegIt) if (ATSSCashDrawer* Drawer = RegIt->GetDrawer()) Drawer->RefillFloat();
+}
 
 	RestockTimer += DeltaTime;
 	if (RestockTimer > 4.f)

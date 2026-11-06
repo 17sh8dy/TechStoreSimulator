@@ -209,7 +209,7 @@ FString ATSSShelf::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit)
 		if (Slot.Qty == 0 || Slot.Product == Held)
 		{
 			Out = (Slot.Qty < HeldDef.SlotCapacity())
-				? FString::Printf(TEXT("[E] Stock %s"), HeldDef.Name)
+				? FString::Printf(TEXT("[E / Click] Stock %s"), HeldDef.Name)
 				: FString(TEXT("This slot is full"));
 		}
 		else
@@ -219,7 +219,7 @@ FString ATSSShelf::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit)
 	}
 	else if (Slot.Qty > 0)
 	{
-		Out = FString::Printf(TEXT("[E] Take %s"), TSSProductDef(Slot.Product).Name);
+		Out = FString::Printf(TEXT("[E / Click] Take %s"), TSSProductDef(Slot.Product).Name);
 	}
 	else
 	{

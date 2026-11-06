@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "TSSProducts.h"
+#include "TSSMoney.h"
 #include "TSSCheckoutTypes.generated.h"
 
 UENUM()
@@ -40,7 +41,7 @@ struct FTSSSaleLine
 	int32 Total() const { return Qty * UnitPrice; }
 };
 
-/** A finished sale, as recorded in the books (and saved). */
+/** A finished sale, as recorded in the books (and saved). Every amount is in cents. */
 USTRUCT()
 struct FTSSTransaction
 {
@@ -55,13 +56,10 @@ struct FTSSTransaction
 	UPROPERTY() int32 CashReceived = 0;
 	UPROPERTY() int32 Change = 0;
 	UPROPERTY() int32 Day = 1;
+	/** Card sales: the network, last four digits and authorisation code printed on the receipt. */
+	UPROPERTY() FString CardNetwork;
+	UPROPERTY() FString CardLast4;
+	UPROPERTY() FString AuthCode;
+	/** Minutes since midnight when it was rung up (for the receipt). */
+	UPROPERTY() int32 TimeMinutes = 0;
 };
-
-namespace TSSMoney
-{
-	/** Bills and coins in the drawer, in the order they sit in it. Whole dollars only. */
-	constexpr int32 Denoms[] = { 1, 5, 10, 20, 50, 100 };
-	constexpr int32 NumDenoms = 6;
-	constexpr float TaxRate = 0.08f;
-	inline int32 TaxFor(int32 Subtotal) { return FMath::RoundToInt(Subtotal * TaxRate); }
-}

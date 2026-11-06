@@ -30,7 +30,7 @@ FText UTSSMonitorWidget::RowName(int32 Row) const
 FText UTSSMonitorWidget::RowAmount(int32 Row) const
 {
 	if (!Reg.IsValid() || !Reg->GetLines().IsValidIndex(Row)) return FText::GetEmpty();
-	return FText::FromString(FString::Printf(TEXT("$%d"), Reg->GetLines()[Row].Total()));
+return FText::FromString(TSSMoney::Format(Reg->GetLines()[Row].Total() * 100));
 }
 
 FText UTSSMonitorWidget::StatusText() const
@@ -48,9 +48,9 @@ FText UTSSMonitorWidget::StatusText() const
 	}
 }
 
-FText UTSSMonitorWidget::SubtotalText() const { return FText::FromString(FString::Printf(TEXT("$%d"), Reg.IsValid() ? Reg->GetSubtotal() : 0)); }
-FText UTSSMonitorWidget::TaxText() const { return FText::FromString(FString::Printf(TEXT("$%d"), Reg.IsValid() ? Reg->GetTax() : 0)); }
-FText UTSSMonitorWidget::TotalText() const { return FText::FromString(FString::Printf(TEXT("$%d"), Reg.IsValid() ? Reg->GetTotal() : 0)); }
+FText UTSSMonitorWidget::SubtotalText() const { return FText::FromString(TSSMoney::Format(Reg.IsValid() ? Reg->GetSubtotal() : 0)); }
+FText UTSSMonitorWidget::TaxText() const { return FText::FromString(TSSMoney::Format(Reg.IsValid() ? Reg->GetTax() : 0)); }
+FText UTSSMonitorWidget::TotalText() const { return FText::FromString(TSSMoney::Format(Reg.IsValid() ? Reg->GetTotal() : 0)); }
 
 FText UTSSMonitorWidget::FooterText() const
 {
@@ -59,9 +59,9 @@ FText UTSSMonitorWidget::FooterText() const
 	switch (Reg->GetPhase())
 	{
 	case ETSSCheckoutPhase::Idle:
-		return FText::FromString(Reg->GetLastTotal() > 0 ? FString::Printf(TEXT("Last sale  $%d"), Reg->GetLastTotal()) : FString(TEXT("Waiting for the next customer")));
+		return FText::FromString(Reg->GetLastTotal() > 0 ?FString::Printf(TEXT("Last sale  %s"), *TSSMoney::Format(Reg->GetLastTotal())) : FString(TEXT("Waiting for the next customer")));
 	case ETSSCheckoutPhase::CashDue:
-		return FText::FromString(FString::Printf(TEXT("Received $%d    Change due $%d    Giving $%d"), Reg->GetCashReceived(), Reg->GetChangeDue(), Reg->GetChangeGiven()));
+		return FText::FromString(FString::Printf(TEXT("Received %s   Change due %s   Giving %s"), *TSSMoney::Format(Reg->GetCashReceived()), *TSSMoney::Format(Reg->GetChangeDue()), *TSSMoney::Format(Reg->GetChangeGiven())));
 	case ETSSCheckoutPhase::CardTap:
 	case ETSSCheckoutPhase::CardReady:
 	case ETSSCheckoutPhase::CardProcessing:
@@ -160,7 +160,7 @@ TSharedRef<SWidget> UTSSMonitorWidget::RebuildWidget()
 FText UTSSTerminalWidget::AmountText() const
 {
 	const bool bShow = Reg.IsValid() && Reg->GetTotal() > 0 && Reg->GetPhase() != ETSSCheckoutPhase::Idle;
-	return FText::FromString(bShow ? FString::Printf(TEXT("$%d"), Reg->GetTotal()) : FString(TEXT("$0")));
+return FText::FromString(bShow ? TSSMoney::Format(Reg->GetTotal()) : FString(TEXT("$0.00")));
 }
 
 FText UTSSTerminalWidget::StatusText() const

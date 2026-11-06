@@ -16,6 +16,7 @@ class ATSSRegisterKeyboard;
 class UChildActorComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
+class UTSSMoneyLayer;
 
 /**
  * The checkout counter and the brain of a sale. The physical devices (monitor, keyboard, scanner, cash drawer,
@@ -61,8 +62,8 @@ public:
 	// ---- the customer starts / drives a sale ------------------------------------------------------
 	/** The customer at the front of the line puts their basket on the counter. */
 	void BeginTransaction(ATSSCustomer* Customer, const TArray<FTSSBasketItem>& Basket);
-	/** The customer hands over `Amount` in cash. */
-	void CustomerPaysCash(int32 Amount);
+	/** The customer hands over cash: notes and coins (TSSMoney table indices). */
+	void CustomerPaysCash(const TArray<int32>& Pieces);
 	void CustomerTapsCard();
 
 	// ---- owner actions (called by the devices) ----------------------------------------------------
@@ -71,7 +72,8 @@ public:
 	FString ScannerPrompt(const ATSSCharacter* Player) const;
 	FString KeyboardPrompt() const;
 	void KeyboardPress();
-	void AddChange(int32 Denom);
+	/** Counts one note or coin (a TSSMoney table index) out of the drawer into the change. False if the drawer has none. */
+	bool AddChange(int32 Piece);
 	void RemoveLastChange();
 	FString DrawerPrompt() const;
 	void ProcessCard();
@@ -89,6 +91,8 @@ public:
 	int32 GetCashReceived() const { return CashReceived; }
 	int32 GetChangeDue() const { return ChangeDue; }
 	int32 GetChangeGiven() const;
+	const TArray<int32>& GetChangePieces() const { return ChangeBills; }
+	const TArray<int32>& GetTender() const { return Tender; }
 	int32 GetLastTotal() const { return LastTotal; }
 	const FString& GetNotice() const { return Notice; }
 	int32 ItemsLeftToScan() const;
@@ -126,7 +130,10 @@ private:
 	void ConfirmChange();
 	void Complete(ETSSPayMethod PaidBy);
 	void Reset();
-	/** With a cashier hired, works the till through each step after a short, human delay. */
+	/** Change that was counted out but not handed over goes back in the drawer. */
+	void ReleaseChange();
+	void ShowMoney();
+/** With a cashier hired, works the till through each step after a short, human delay. */
 	void RunCashier(float Dt);
 
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
@@ -134,6 +141,8 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Cabinet;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> CashPile;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> CashText;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTSSMoneyLayer> TenderLayer;   // what the customer handed over
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTSSMoneyLayer> ChangeLayer;   // the change being counted out
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UChildActorComponent> MonitorComp;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UChildActorComponent> KeyboardComp;
@@ -150,8 +159,9 @@ private:
 	UPROPERTY() TObjectPtr<ATSSCustomer> Customer;
 	UPROPERTY() TArray<TObjectPtr<ATSSProductItem>> Items;
 	TArray<FTSSSaleLine> Lines;
-	TArray<int32> ChangeBills;
-	int32 Subtotal = 0, Tax = 0, Total = 0;
+	TArray<int32> ChangeBills;   // TSSMoney table indices
+	TArray<int32> Tender;        // the customer's notes and coins
+int32 Subtotal = 0, Tax = 0, Total = 0;
 	int32 CashReceived = 0, ChangeDue = 0, LastTotal = 0;
 	int32 ScannedCount = 0;
 	int32 ItemsPlaced = 0;

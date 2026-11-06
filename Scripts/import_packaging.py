@@ -20,7 +20,7 @@ unreal.EditorAssetLibrary.make_directory(MAT_DIR)
 # ---- textures ----------------------------------------------------------------------------------------
 tasks = []
 for f in sorted(os.listdir(ART)):
-    if f.startswith("T_Pack_") and f.endswith(".png"):
+    if f.startswith(("T_Pack_", "T_Cash_", "T_Coin_", "T_Card_")) and f.endswith(".png"):
         t = unreal.AssetImportTask()
         t.filename = os.path.join(ART, f)
         t.destination_path = TEX_DIR

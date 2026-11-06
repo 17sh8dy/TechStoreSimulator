@@ -27,7 +27,7 @@ FText UTSSHudWidget::MoneyText() const
 {
 	const UWorld* World = GetWorld();
 	const UTSSStoreSubsystem* Store = World ? World->GetSubsystem<UTSSStoreSubsystem>() : nullptr;
-	return FText::FromString(FString::Printf(TEXT("$%d"), Store ? Store->GetMoney() : 0));
+return FText::FromString(TSSMoney::Format(Store ? Store->GetMoneyCents() : 0));
 }
 
 FText UTSSHudWidget::HeldText() const
@@ -216,7 +216,7 @@ TSharedRef<SWidget> UTSSHudWidget::RebuildWidget()
 		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(0.f, 0.f, 0.f, 18.f)
 		[
 			SNew(STextBlock)
-			.Text(FText::FromString(TEXT("WASD move   |   Mouse look   |   E interact / ring up   |   Wheel / [ ] price   |   Esc menu")))
+			.Text(FText::FromString(TEXT("WASD move   |   Mouse look   |E or Left-click interact   |   Wheel / [ ] price   |   Esc menu")))
 			.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
 			.ColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, 0.55f))
 		];

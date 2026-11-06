@@ -72,7 +72,7 @@ bool UTSSMoverComponent::Update(ATSSPlayerController* PC, ATSSCharacter* Who, AT
 		Pos.Y = FMath::GridSnap(Pos.Y, 5.f);
 		SetPlacement(Pos, NewYaw);
 
-		if (PC->WasInputKeyJustPressed(EKeys::E)) Commit();
+if (PC->WasInputKeyJustPressed(EKeys::E) || PC->WasInputKeyJustPressed(EKeys::LeftMouseButton)) Commit();
 		return true;
 	}
 
@@ -197,7 +197,7 @@ FString UTSSMoverComponent::GetPrompt() const
 {
 	if (const ATSSInteractable* Obj = Moving.Get())
 	{
-		FString S = FString::Printf(TEXT("MOVING THE %s\n[Look] aim    [Wheel / R] rotate    [E] put down    [Q] cancel"), *Obj->GetMoveName().ToUpper());
+		FString S = FString::Printf(TEXT("MOVING THE %s\n[Look] aim    [Wheel / R] rotate    [E / Click] put down    [Q] cancel"), *Obj->GetMoveName().ToUpper());
 		if (!bValid) S += FString::Printf(TEXT("\nCan't put it down here: %s"), *InvalidReason);
 		return S;
 	}

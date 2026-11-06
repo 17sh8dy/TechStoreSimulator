@@ -35,7 +35,7 @@ FString ATSSProductItem::GetPrompt(const ATSSCharacter* Player, const FHitResult
 	const FTSSProductDef& Def = TSSProductDef(Product);
 	if (bScanned) return FString::Printf(TEXT("%s  -  scanned"), Def.Name);
 	if (Player->GetHeld() != ETSSProduct::None) return TEXT("Your hands are full");
-	return FString::Printf(TEXT("[E] Pick up %s  ($%d)"), Def.Name, UnitPrice);
+	return FString::Printf(TEXT("[E / Click] Pick up %s  ($%d)"), Def.Name, UnitPrice);
 }
 
 void ATSSProductItem::Interact(ATSSCharacter* Player, const FHitResult& Hit)

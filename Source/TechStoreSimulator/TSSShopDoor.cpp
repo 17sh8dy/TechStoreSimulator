@@ -181,14 +181,14 @@ FString ATSSShopDoor::SignPrompt() const
 {
 	const UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
 	const bool bOpen = !Store || Store->IsOpen();
-	return bOpen ? FString(TEXT("[E] Flip the sign to CLOSED  (the shop is OPEN: customers come in)"))
-	             : FString(TEXT("[E] Flip the sign to OPEN  (the shop is CLOSED: no customers)"));
+	return bOpen ? FString(TEXT("[E / Click] Flip the sign to CLOSED  (the shop is OPEN: customers come in)"))
+	             : FString(TEXT("[E / Click] Flip the sign to OPEN  (the shop is CLOSED: no customers)"));
 }
 
 FString ATSSShopDoor::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
 {
 	if (Hit.GetComponent() == SignPlate) return SignPrompt();
-	return bHeldOpen ? FString(TEXT("[E] Close the door")) : FString(TEXT("[E] Open the door"));
+	return bHeldOpen ? FString(TEXT("[E / Click] Close the door")) : FString(TEXT("[E / Click] Open the door"));
 }
 
 void ATSSShopDoor::Interact(ATSSCharacter* Player, const FHitResult& Hit)

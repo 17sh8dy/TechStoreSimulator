@@ -280,7 +280,7 @@ FText UTSSDeskIdleWidget::Prompt() const
 {
 	// Blinking prompt, like a terminal.
 	const bool bOn = FMath::Fmod(FPlatformTime::Seconds(), 1.0) < 0.6;
-	return FText::FromString(bOn ? TEXT("PRESS [E] TO LOG IN_") : TEXT("PRESS [E] TO LOG IN"));
+	return FText::FromString(bOn ? TEXT("PRESS [E / Click] TO LOG IN_") : TEXT("PRESS [E / Click] TO LOG IN"));
 }
 
 TSharedRef<SWidget> UTSSDeskIdleWidget::RebuildWidget()

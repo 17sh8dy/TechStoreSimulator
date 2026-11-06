@@ -557,8 +557,8 @@ public:
 				+ SHorizontalBox::Slot().AutoWidth()[ SNew(SBox).MinDesiredWidth(80.f)[ DskTxt(FString::Printf(TEXT("Day %d"), Tx.Day), 14, false, Th().Dim) ] ]
 				+ SHorizontalBox::Slot().AutoWidth()[ SNew(SBox).MinDesiredWidth(110.f)[ DskTxt(FString::Printf(TEXT("%d item%s"), Tx.Items, Tx.Items == 1 ? TEXT("") : TEXT("s")), 14) ] ]
 				+ SHorizontalBox::Slot().AutoWidth()[ SNew(SBox).MinDesiredWidth(80.f)[ DskTxt(DskPayName(Tx.Method), 14) ] ]
-				+ SHorizontalBox::Slot().FillWidth(1.f)[ DskTxt(FString::Printf(TEXT("sub %s  tax %s"), *DskMoney(Tx.Subtotal), *DskMoney(Tx.Tax)), 14, false, Th().Dim) ]
-				+ SHorizontalBox::Slot().AutoWidth()[ DskTxt(DskMoney(Tx.Total), 14, true, Th().Good) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f)[ DskTxt(FString::Printf(TEXT("sub %s  tax %s"),*TSSMoney::Format(Tx.Subtotal), *TSSMoney::Format(Tx.Tax)), 14, false, Th().Dim) ]
+				+ SHorizontalBox::Slot().AutoWidth()[DskTxt(TSSMoney::Format(Tx.Total), 14, true, Th().Good) ]
 			];
 		}
 		if (Shown == 0) Recent->AddSlot().AutoHeight()[ DskTxt(TEXT("No sales yet."), 14, false, Th().Dim) ];
@@ -571,11 +571,11 @@ public:
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)
 				[
 					DskPanel(SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Cash on hand"), DskMoney(S->GetMoney()), true, Th().Good) ]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskRow2(TEXT("Revenue (pre-tax)"), DskMoney(S->GetLifetimeRevenue())) ]
-						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("  of which cash"), DskMoney(S->GetCashSales())) ]
-						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("  of which card"), DskMoney(S->GetCardSales())) ]
-						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Sales tax collected"), DskMoney(S->GetTaxCollected())) ]
+						+ SVerticalBox::Slot().AutoHeight()[DskRow2(TEXT("Cash on hand"), TSSMoney::Format(S->GetMoneyCents()), true, Th().Good) ]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[DskRow2(TEXT("Revenue (pre-tax)"), TSSMoney::Format(S->GetLifetimeRevenueCents())) ]
+						+ SVerticalBox::Slot().AutoHeight()[DskRow2(TEXT("  of which cash"), TSSMoney::Format(S->GetCashSalesCents())) ]
+						+ SVerticalBox::Slot().AutoHeight()[DskRow2(TEXT("  of which card"), TSSMoney::Format(S->GetCardSalesCents())) ]
+						+ SVerticalBox::Slot().AutoHeight()[DskRow2(TEXT("Sales tax collected"), TSSMoney::Format(S->GetTaxCollectedCents())) ]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskRow2(TEXT("Spent on stock orders"), DskMoney(S->GetOrderSpend())) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Spent on upgrades"), DskMoney(S->GetUpgradeSpend())) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Staff: hiring and wages"), DskMoney(S->GetWageSpend())) ]

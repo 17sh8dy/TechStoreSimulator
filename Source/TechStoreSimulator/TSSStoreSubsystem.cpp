@@ -10,17 +10,17 @@ void UTSSStoreSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 }
 
-bool UTSSStoreSubsystem::TrySpend(int32 Amount)
+bool UTSSStoreSubsystem::TrySpendCents(int32 Amount)
 {
-	if (Amount > Money) return false;
-	Money -= Amount;
+	if (Amount > MoneyCents) return false;
+	MoneyCents -= Amount;
 	OnChanged.Broadcast();
 	return true;
 }
 
-void UTSSStoreSubsystem::Earn(int32 Amount)
+void UTSSStoreSubsystem::EarnCents(int32 Amount)
 {
-	Money += Amount;
+	MoneyCents += Amount;
 	OnChanged.Broadcast();
 }
 
@@ -44,8 +44,8 @@ void UTSSStoreSubsystem::RecordSale(const FTSSTransaction& Sale)
 	ProductsSold += Sale.Items;
 	(Sale.Method == ETSSPayMethod::Cash ? CashSales : CardSales) += Sale.Total;
 	TaxCollected += Sale.Tax; // collected, but not yet owed to anyone: tax liability is not modelled
-	Earn(Sale.Total);
-	OnSale.Broadcast(Logged);
+	EarnCents(Sale.Total);
+OnSale.Broadcast(Logged);
 }
 
 void UTSSStoreSubsystem::RecordWalkout()
@@ -63,7 +63,7 @@ void UTSSStoreSubsystem::StartDay(int32 NewDay)
 
 void UTSSStoreSubsystem::ExportTo(UTSSBusinessSave* S) const
 {
-	S->Money = Money; S->Served = Served; S->Lost = Lost; S->CashSales = CashSales; S->CardSales = CardSales;
+S->Version = 2; S->Money = MoneyCents; S->Served = Served; S->Lost = Lost; S->CashSales = CashSales; S->CardSales = CardSales;
 	S->TaxCollected = TaxCollected; S->LifetimeRevenue = LifetimeRevenue; S->TodayRevenue = TodayRevenue;
 	S->ProductsSold = ProductsSold; S->OrderSpend = OrderSpend; S->UpgradeSpend = UpgradeSpend; S->Day = Day;
 	S->Transactions = Transactions;
@@ -75,11 +75,17 @@ void UTSSStoreSubsystem::ExportTo(UTSSBusinessSave* S) const
 
 void UTSSStoreSubsystem::ImportFrom(const UTSSBusinessSave* S)
 {
-	Money = S->Money; Served = S->Served; Lost = S->Lost; CashSales = S->CashSales; CardSales = S->CardSales;
+	MoneyCents = S->Money; Served = S->Served; Lost = S->Lost; CashSales = S->CashSales; CardSales = S->CardSales;
 	TaxCollected = S->TaxCollected; LifetimeRevenue = S->LifetimeRevenue; TodayRevenue = S->TodayRevenue;
 	ProductsSold = S->ProductsSold; OrderSpend = S->OrderSpend; UpgradeSpend = S->UpgradeSpend; Day = FMath::Max(1, S->Day);
 	Transactions = S->Transactions;
 	bOpen = S->bStoreOpen;
+	if (S->Version < 2)
+	{
+		// Saved before cents: every money field was whole dollars.
+		MoneyCents *= 100; CashSales *= 100; CardSales *= 100; TaxCollected *= 100; LifetimeRevenue *= 100; TodayRevenue *= 100;
+		for (FTSSTransaction& T : Transactions) { T.Subtotal *= 100; T.Tax *= 100; T.Total *= 100; T.CashReceived *= 100; T.Change *= 100; }
+	}
 	WageSpend = S->WageSpend; ContractSpend = S->ContractSpend;
 	// An older save may predate newer products: restore the prices it knows, leave the rest at their defaults.
 	for (int32 i = 0; i < S->Prices.Num() && i < static_cast<int32>(ETSSProduct::Count); ++i) Prices[i] = FMath::Clamp(S->Prices[i], 1, 99999);

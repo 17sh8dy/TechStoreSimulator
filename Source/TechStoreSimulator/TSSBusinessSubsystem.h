@@ -80,6 +80,12 @@ public:
 	float GetHour() const { return FMath::Fmod(StartHour + SimSeconds / DayLengthSeconds * 24.f + 24.f * 1000.f, 24.f); }
 	/** Jumps the clock to this hour of the current day (developer/test helper; it also moves order timers). */
 	void SetHour(float Hour);
+	/** The shop opens for its first day on this calendar date (a day is one DayLengthSeconds). */
+	static FDateTime StartDate() { return FDateTime(2026, 11, 6); }
+	/** The calendar date of a shop day. */
+	static FDateTime DateForDay(int32 Day) { return StartDate() + FTimespan::FromDays(FMath::Max(0, Day - 1)); }
+	/** "11/06/2026" */
+	static FString FormatDate(int32 Day) { const FDateTime D = DateForDay(Day); return FString::Printf(TEXT("%02d/%02d/%04d"), D.GetMonth(), D.GetDay(), D.GetYear()); }
 	/** "5:44 PM" */
 	static FString FormatClock(float Hour);
 	/** The calendar day number for a given sim time: a new day begins at midnight. */

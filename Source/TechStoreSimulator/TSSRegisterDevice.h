@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "TSSInteractable.h"
 #include "TSSCheckoutTypes.h"
+#include "TSSMoney.h"
 #include "TSSRegisterDevice.generated.h"
 
 class ATSSRegister;
@@ -80,13 +81,18 @@ private:
 	bool bGlassIsIdle = true;
 };
 
-/** The cash drawer: slides open when cash is paid; click a bill stack to add it to the change. Keeps the till's cash. */
+/**
+ * The cash drawer: slides open when cash is paid. It holds real US notes and coins in eleven slots (six notes, five coins);
+ * click a slot to put that piece into the change. The customer's payment goes into the drawer when the sale completes, and
+ * the shelf-stocker tops it back up to its float at the start of every day.
+ */
 UCLASS()
 class ATSSCashDrawer : public ATSSRegisterDevice
 {
 	GENERATED_BODY()
 public:
 	ATSSCashDrawer();
+	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual FString GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const override;
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) override;
@@ -94,21 +100,34 @@ public:
 
 	void SetOpen(bool bOpen) { bWantOpen = bOpen; }
 	bool IsOpen() const { return OpenAlpha > 0.5f; }
-	void AddCash(int32 Amount);
-	int32 GetCashOnHand() const { return CashOnHand; }
-	/** Which denomination stack (index into TSSMoney::Denoms) a trace hit lands on. */
-	int32 StackAt(const FHitResult& Hit) const;
-	/** Test hook: add the stack for this denomination to the change, as a click on it would. */
-	void ClickDenom(int32 Denom);
+
+	const TSSMoney::FStock& GetStock() const { return Stock; }
+	int32 GetCashOnHandCents() const { return Stock.TotalCents(); }
+	/** Takes one piece (a TSSMoney table index) out for change. False if the slot is empty. */
+	bool TakePiece(int32 Piece);
+	/** Puts a piece back (change that was taken but not given). */
+	void ReturnPiece(int32 Piece);
+	/** The customer's payment goes into the slots. */
+	void Receive(const TArray<int32>& Pieces);
+	/** Tops every slot up to the starting float (a trip to the bank, every morning). */
+	void RefillFloat();
+	/** Which slot (a TSSMoney table index) a trace hit lands on. */
+	int32 SlotAt(const FHitResult& Hit) const;
+	/** Test hook: add one piece to the change as a click on its slot would. */
+	void ClickPiece(int32 Piece);
+	/** Test hook: set exactly what the drawer holds. */
+	void SetStockForTest(const TSSMoney::FStock& S) { Stock = S; Refresh(); }
 
 private:
-	void UpdateLabel();
+	void Refresh();
 
 	UPROPERTY() TObjectPtr<USceneComponent> Tray;
 	UPROPERTY() TObjectPtr<UTextRenderComponent> CashLabel;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Tops;      // what shows in each slot
+	UPROPERTY() TArray<TObjectPtr<UTextRenderComponent>> SlotLabels;
+	TSSMoney::FStock Stock;
 	bool bWantOpen = false;
 	float OpenAlpha = 0.f;
-	int32 CashOnHand = 300;
 };
 
 /** The card terminal: shows the amount, takes the customer's card, and processes the payment when you press it. */
@@ -146,7 +165,8 @@ public:
 	virtual FString GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const override;
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) override;
 
-	void Print(const FTSSTransaction& Sale);
+	/** Prints the receipt for a finished sale (its lines are the register screen's lines). */
+	void Print(const FTSSTransaction& Sale, const TArray<FTSSSaleLine>& Lines);
 	void Tear();
 	bool HasReceipt() const { return bPrinting || PrintAlpha > 0.f; }
 

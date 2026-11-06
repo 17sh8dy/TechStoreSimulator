@@ -440,21 +440,15 @@ void ATSSCustomer::BeginPaymentGestures()
 	}
 	else
 	{
-		// Cash: sometimes the exact amount, otherwise rounded up to a friendly note so the owner has change to count.
-		const int32 Total = Register->GetTotal();
-		int32 Amount = Total;
-		if (FMath::FRand() >= 0.3f)
-		{
-			TArray<int32> Options;
-			for (int32 Step : { 5, 10, 20, 50, 100 }) Options.AddUnique(((Total + Step - 1) / Step) * Step);
-			Amount = Options[FMath::RandRange(0, Options.Num() - 1)];
-		}
-		S.Add(Do([this, Amount]() { Say(FString::Printf(TEXT("Cash. Here's $%d."), Amount), 3.f); }));
+		// Cash: real US notes and coins, sometimes the exact amount, mostly a few notes (and now and then some coins) that cover it.
+		const TArray<int32> Tender = TSSMoney::ChooseTender(Register->GetTotal());
+		const int32 Amount = TSSMoney::Sum(Tender);
+		S.Add(Do([this, Amount]() { Say(FString::Printf(TEXT("Cash. Here's %s."), *TSSMoney::Format(Amount)), 3.f); }));
 		S.Add(ReachTo(RHand, [this]() { return HipPoint(); }));
 		S.Add(Do([this]() { HandProp->SetPlain(FVector(16.f, 7.f, 1.6f), FLinearColor(0.25f, 0.6f, 0.3f)); ShowHeld(HandProp, true); }));
 		S.Add(Wait(0.2f));
 		S.Add(ReachTo(RHand, [this]() { return Register->CashPoint() + FVector(0.f, 0.f, 8.f); }));
-		S.Add(Do([this, Amount]() { ShowHeld(HandProp, false); Register->CustomerPaysCash(Amount); }));
+S.Add(Do([this, Tender]() { ShowHeld(HandProp, false); Register->CustomerPaysCash(Tender); }));
 		S.Add(Wait(0.25f));
 		S.Add(Do([this]() { Human->Relax(RHand, BlendSeconds()); }));
 	}

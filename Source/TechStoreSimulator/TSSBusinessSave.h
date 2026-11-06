@@ -13,10 +13,11 @@ class UTSSBusinessSave : public USaveGame
 	GENERATED_BODY()
 
 public:
-	UPROPERTY() int32 Version = 1;
+/** 1 = the money fields are whole dollars; 2 = they are cents (and sales carry cents). */
+	UPROPERTY() int32 Version = 2;
 
 	// The books
-	UPROPERTY() int32 Money = 1000;
+UPROPERTY() int32 Money = 100000;   // cents (see Version)
 	UPROPERTY() int32 Served = 0;
 	UPROPERTY() int32 Lost = 0;
 	UPROPERTY() int32 CashSales = 0;

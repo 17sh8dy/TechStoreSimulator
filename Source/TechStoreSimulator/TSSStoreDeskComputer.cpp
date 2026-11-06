@@ -112,7 +112,7 @@ void ATSSStoreDeskComputer::BeginPlay()
 FString ATSSStoreDeskComputer::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
 {
 	if (Player->GetHeldItem()) return TEXT("Put the customer's item down first");
-	return TEXT("[E] Use StoreDesk");
+	return TEXT("[E / Click] Use StoreDesk");
 }
 
 void ATSSStoreDeskComputer::Interact(ATSSCharacter* Player, const FHitResult& Hit)
