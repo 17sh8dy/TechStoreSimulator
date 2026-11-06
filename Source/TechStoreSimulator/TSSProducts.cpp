@@ -29,20 +29,20 @@ const FTSSProductDef& TSSProductDef(ETSSProduct Product)
 			TEXT("Fitness and notifications on your wrist. A strong seller once word gets around."), TEXT("Wearables"), TEXT("KYRA"), TEXT("T_Pack_Smartwatch"), 3 },
 		{ TEXT("Speaker"), 150, FVector(14, 14, 22), FLinearColor(0.14f, 0.46f, 0.24f),
 			TEXT("Waterproof portable speaker. Sells well in the warm months."), TEXT("Audio"), TEXT("TERNO"), TEXT("T_Pack_Speaker"), 2 },
-			// Premium Supplier Access (no packaging art yet: they show as plain coloured boxes).
+			// Premium Supplier Access .
 			{ TEXT("Gaming Laptop"), 900, FVector(8, 44, 32), FLinearColor(0.5f, 0.06f, 0.08f),
-				TEXT("A high-refresh laptop with a serious graphics card. Big ticket, big margin."), TEXT("Computers"), TEXT("ZENTO"), TEXT(""), 6, TEXT("supplier_premium") },
+				TEXT("A high-refresh laptop with a serious graphics card. Big ticket, big margin."), TEXT("Computers"), TEXT("ZENTO"), TEXT("T_Pack_GamingLaptop"), 6, TEXT("supplier_premium") },
 			{ TEXT("VR Headset"), 550, FVector(16, 28, 28), FLinearColor(0.08f, 0.1f, 0.14f),
-				TEXT("Standalone virtual-reality headset with two controllers."), TEXT("Wearables"), TEXT("KYRA"), TEXT(""), 6, TEXT("supplier_premium") },
+				TEXT("Standalone virtual-reality headset with two controllers."), TEXT("Wearables"), TEXT("KYRA"), TEXT("T_Pack_VRHeadset"), 6, TEXT("supplier_premium") },
 			{ TEXT("Mirrorless Camera"), 780, FVector(14, 22, 18), FLinearColor(0.2f, 0.2f, 0.22f),
-				TEXT("Interchangeable-lens camera for people who outgrew their phone."), TEXT("Photography"), TEXT("LUMIO"), TEXT(""), 7, TEXT("supplier_premium") },
+				TEXT("Interchangeable-lens camera for people who outgrew their phone."), TEXT("Photography"), TEXT("LUMIO"), TEXT("T_Pack_Camera"), 7, TEXT("supplier_premium") },
 			// Gaming Department
 			{ TEXT("Game Controller"), 55, FVector(8, 18, 16), FLinearColor(0.36f, 0.12f, 0.5f),
-				TEXT("Wireless gamepad. Cheap, and everyone who buys a console wants a second one."), TEXT("Gaming"), TEXT("KYRA"), TEXT(""), 4, TEXT("dept_gaming") },
+				TEXT("Wireless gamepad. Cheap, and everyone who buys a console wants a second one."), TEXT("Gaming"), TEXT("KYRA"), TEXT("T_Pack_Controller"), 4, TEXT("dept_gaming") },
 			{ TEXT("Gaming Headset"), 140, FVector(14, 22, 24), FLinearColor(0.5f, 0.08f, 0.3f),
-				TEXT("Headset with a boom mic and loud opinions about team chat."), TEXT("Gaming"), TEXT("VEXA"), TEXT(""), 4, TEXT("dept_gaming") },
+				TEXT("Headset with a boom mic and loud opinions about team chat."), TEXT("Gaming"), TEXT("VEXA"), TEXT("T_Pack_GamingHeadset"), 4, TEXT("dept_gaming") },
 			{ TEXT("Racing Wheel"), 260, FVector(24, 44, 40), FLinearColor(0.08f, 0.1f, 0.14f),
-				TEXT("Force-feedback wheel and pedals. A bulky box that gamers happily pay for."), TEXT("Gaming"), TEXT("TERNO"), TEXT(""), 5, TEXT("dept_gaming") },
+				TEXT("Force-feedback wheel and pedals. A bulky box that gamers happily pay for."), TEXT("Gaming"), TEXT("TERNO"), TEXT("T_Pack_RacingWheel"), 5, TEXT("dept_gaming") },
 	};
 	const int32 Index = FMath::Clamp(static_cast<int32>(Product), 0, static_cast<int32>(ETSSProduct::Count) - 1);
 	return Defs[Index];

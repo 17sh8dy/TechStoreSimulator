@@ -1239,14 +1239,40 @@ Check(TEXT("Employees and Contracts are real sections once their level is reache
 					return Biz->PlaceOrder({ { ETSSProduct::Camera, 1 }, { ETSSProduct::Controller, 2 } }, Why, &Id1) && Id1 > 0;
 				}());
 
-				ConsoleCommand(TEXT("TSSLook 640 0 90 180 -3"));
-				GetDesk()->SetDark(false);
-				TSSDeskPage(4);
-				Snap();
-				St->Hold = 1.6f; St->Step = 8; St->Elapsed = 0.f;
-				break;
-			}
-			case 8:
+// Photograph the six new products on a shelf, to see their packaging art.
+for (TActorIterator<ATSSShelf> ShotIt(GetWorld()); ShotIt; ++ShotIt) if (ShotIt->LayoutKey() == FName(TEXT("shelf_2"))) { StockShelf = *ShotIt; break; }
+if (StockShelf)
+{
+	TArray<FTSSShelfSlotSave> Show;
+	const ETSSProduct New6[] = { ETSSProduct::GamingLaptop, ETSSProduct::VRHeadset, ETSSProduct::Camera, ETSSProduct::Controller, ETSSProduct::GamingHeadset, ETSSProduct::RacingWheel };
+	for (int32 s = 0; s < ATSSShelf::Tiers * ATSSShelf::Columns; ++s)
+	{
+		FTSSShelfSlotSave& Z = Show.AddDefaulted_GetRef();
+		if (s < 6) { Z.Product = New6[s]; Z.Qty = 3; }
+	}
+StockShelf->ImportSlots(Show);
+CloseStoreDesk();
+const FVector Wp = StockShelf->GetActorTransform().TransformPosition(FVector(120.f, 0.f, 0.f));
+	const FVector Wt = StockShelf->GetActorTransform().TransformPosition(FVector(0.f, 0.f, 90.f));
+	const FRotator R = (Wt - (Wp + FVector(0.f, 0.f, 154.f))).Rotation();
+ConsoleCommand(FString::Printf(TEXT("TSSLook %f %f 90 %f %f"), Wp.X, Wp.Y, R.Yaw, R.Pitch));
+UE_LOG(LogTemp, Display, TEXT("TSS shelf shot: shelf %s at %s yaw %.0f, camera %s"), *StockShelf->LayoutKey().ToString(), *StockShelf->GetActorLocation().ToString(), StockShelf->GetActorRotation().Yaw, *Wp.ToString());
+Snap();
+}
+else
+{
+	ConsoleCommand(TEXT("TSSLook 640 0 90 180 -3"));
+}
+St->Hold = 2.0f; St->Step = 12; St->Elapsed = 0.f;
+break;
+}
+case 12:
+GetDesk()->SetDark(false);
+TSSDeskPage(4);
+Snap();
+St->Hold = 1.6f; St->Step = 8; St->Elapsed = 0.f;
+break;
+case 8:
 				TSSDeskPage(5);
 				Snap();
 				St->Hold = 1.6f; St->Step = 9;

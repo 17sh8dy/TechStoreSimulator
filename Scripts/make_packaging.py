@@ -41,6 +41,14 @@ PRODUCTS = [
     ("Earbuds",    "VEXA",  "Buds S",    7.0, 11.0, ["True wireless", "24 h"],              "earbuds"),
     ("Smartwatch", "KYRA",  "Watch 2",  10.0, 12.0, ["AMOLED", "GPS", "7 day battery"],     "watch"),
     ("Speaker",    "TERNO", "Boom 2",   14.0, 22.0, ["Waterproof", "360 sound", "20 h"],    "speaker"),
+    # Premium Supplier Access
+    ("GamingLaptop", "ZENTO", "Forge 16", 44.0, 32.0, ["16\" 240 Hz", "RTX-class GPU", "32 GB RAM"], "gaminglaptop"),
+    ("VRHeadset",  "KYRA",  "Orbit VR",  28.0, 28.0, ["Standalone", "4K per eye", "2 controllers"], "vr"),
+    ("Camera",     "LUMIO", "Shot M5",   22.0, 18.0, ["24 MP", "4K video", "Lens kit"],       "camera"),
+    # Gaming Department
+    ("Controller", "KYRA",  "Pad Pro",   18.0, 16.0, ["Wireless", "40 h battery"],            "controller"),
+    ("GamingHeadset", "VEXA", "Strike G", 22.0, 24.0, ["7.1 surround", "Boom mic"],           "gamingheadset"),
+    ("RacingWheel", "TERNO", "Apex GT",  44.0, 40.0, ["Force feedback", "3 pedals"],          "wheel"),
 ]
 
 def lerp(a, b, t): return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
@@ -165,7 +173,62 @@ def sil_speaker(d, cx, cy, s, acc):
             d.ellipse([cx + xx * w * 0.14 - 3, cy + yy * h * 0.075 - 3, cx + xx * w * 0.14 + 3, cy + yy * h * 0.075 + 3], fill=(90, 100, 92))
     rr(d, [cx - w * 0.3, cy + h * 0.33, cx + w * 0.3, cy + h * 0.39], 5, fill=acc)
 
-SIL = dict(phone=sil_phone, laptop=sil_laptop, headphones=sil_headphones, console=sil_console, monitor=sil_monitor,
+def sil_gaminglaptop(d, cx, cy, s, acc):
+    w = s
+    lid_h = w * 0.55
+    d.polygon([(cx - w * 0.42, cy - lid_h * 0.55), (cx + w * 0.42, cy - lid_h * 0.55), (cx + w * 0.46, cy + lid_h * 0.2), (cx - w * 0.46, cy + lid_h * 0.2)], fill=(30, 30, 36))
+    d.polygon([(cx - w * 0.39, cy - lid_h * 0.5), (cx + w * 0.39, cy - lid_h * 0.5), (cx + w * 0.42, cy + lid_h * 0.15), (cx - w * 0.42, cy + lid_h * 0.15)], fill=lerp((120, 20, 40), (240, 120, 40), 0.5))
+    d.polygon([(cx - w * 0.5, cy + lid_h * 0.25), (cx + w * 0.5, cy + lid_h * 0.25), (cx + w * 0.44, cy + lid_h * 0.36), (cx - w * 0.44, cy + lid_h * 0.36)], fill=(40, 40, 48))
+    for i in range(6):   # glowing key strip
+        x0 = cx - w * 0.36 + i * w * 0.125
+        d.rectangle([x0, cy + lid_h * 0.285, x0 + w * 0.1, cy + lid_h * 0.31], fill=acc)
+
+def sil_vr(d, cx, cy, s, acc):
+    rr(d, [cx - s * 0.42, cy - s * 0.22, cx + s * 0.42, cy + s * 0.2], s * 0.12, fill=(230, 230, 238), outline=(150, 150, 168), width=4)
+    rr(d, [cx - s * 0.36, cy - s * 0.15, cx + s * 0.36, cy + s * 0.13], s * 0.08, fill=(14, 14, 22))
+    d.ellipse([cx - s * 0.28, cy - s * 0.1, cx - s * 0.04, cy + s * 0.08], fill=lerp((60, 20, 120), (200, 80, 220), 0.5))
+    d.ellipse([cx + s * 0.04, cy - s * 0.1, cx + s * 0.28, cy + s * 0.08], fill=lerp((60, 20, 120), (200, 80, 220), 0.5))
+    d.rectangle([cx - s * 0.5, cy - s * 0.04, cx - s * 0.42, cy + s * 0.04], fill=(60, 60, 74))
+    d.rectangle([cx + s * 0.42, cy - s * 0.04, cx + s * 0.5, cy + s * 0.04], fill=(60, 60, 74))
+    for sx in (-1, 1):   # the two controllers
+        d.ellipse([cx + sx * s * 0.3 - s * 0.07, cy + s * 0.24, cx + sx * s * 0.3 + s * 0.07, cy + s * 0.36], fill=(34, 34, 44), outline=acc, width=3)
+
+def sil_camera(d, cx, cy, s, acc):
+    rr(d, [cx - s * 0.46, cy - s * 0.2, cx + s * 0.46, cy + s * 0.3], s * 0.07, fill=(34, 34, 40), outline=(170, 170, 185), width=3)
+    d.rectangle([cx - s * 0.46, cy - s * 0.06, cx + s * 0.46, cy + s * 0.3], fill=(52, 52, 60))
+    rr(d, [cx - s * 0.3, cy - s * 0.3, cx - s * 0.1, cy - s * 0.2], 5, fill=(34, 34, 40), outline=(170, 170, 185), width=2)
+    d.ellipse([cx - s * 0.2, cy - s * 0.12, cx + s * 0.2, cy + s * 0.28], fill=(16, 16, 22), outline=(200, 200, 215), width=5)
+    d.ellipse([cx - s * 0.13, cy - s * 0.05, cx + s * 0.13, cy + s * 0.21], fill=lerp((20, 40, 110), (60, 140, 220), 0.5))
+    d.ellipse([cx - s * 0.05, cy + s * 0.0, cx + s * 0.0, cy + s * 0.05], fill=(220, 240, 255))
+    d.ellipse([cx + s * 0.3, cy - s * 0.12, cx + s * 0.38, cy - s * 0.04], fill=acc)
+
+def sil_controller(d, cx, cy, s, acc):
+    rr(d, [cx - s * 0.42, cy - s * 0.16, cx + s * 0.42, cy + s * 0.2], s * 0.15, fill=(36, 36, 48), outline=(205, 205, 220), width=4)
+    d.ellipse([cx - s * 0.58, cy - s * 0.02, cx - s * 0.2, cy + s * 0.42], fill=(36, 36, 48), outline=(205, 205, 220), width=4)
+    d.ellipse([cx + s * 0.2, cy - s * 0.02, cx + s * 0.58, cy + s * 0.42], fill=(36, 36, 48), outline=(205, 205, 220), width=4)
+    d.ellipse([cx - s * 0.32, cy - s * 0.06, cx - s * 0.16, cy + s * 0.1], fill=(90, 90, 110))
+    d.ellipse([cx + s * 0.04, cy + s * 0.04, cx + s * 0.2, cy + s * 0.2], fill=(90, 90, 110))
+    for dx, dy in ((0.3, -0.1), (0.38, -0.02), (0.22, -0.02), (0.3, 0.06)):
+        d.ellipse([cx + s * dx - s * 0.03, cy + s * dy - s * 0.03, cx + s * dx + s * 0.03, cy + s * dy + s * 0.03], fill=acc)
+    d.rectangle([cx - s * 0.04, cy - s * 0.1, cx + s * 0.04, cy + s * 0.0], fill=(70, 70, 88))
+
+def sil_gamingheadset(d, cx, cy, s, acc):
+    sil_headphones(d, cx, cy - s * 0.08, s, acc)
+    d.arc([cx - s * 0.5, cy - s * 0.03, cx - s * 0.1, cy + s * 0.38], 90, 200, fill=(230, 230, 235), width=int(s * 0.03))
+    d.ellipse([cx - s * 0.2, cy + s * 0.26, cx - s * 0.08, cy + s * 0.38], fill=acc)
+
+def sil_wheel(d, cx, cy, s, acc):
+    r = s * 0.38
+    d.ellipse([cx - r, cy - r - s * 0.08, cx + r, cy + r - s * 0.08], outline=(30, 30, 38), width=int(s * 0.1))
+    d.ellipse([cx - r, cy - r - s * 0.08, cx + r, cy + r - s * 0.08], outline=(120, 120, 135), width=3)
+    d.rectangle([cx - r * 0.9, cy - s * 0.1, cx + r * 0.9, cy - s * 0.04], fill=(30, 30, 38))
+    d.rectangle([cx - s * 0.03, cy - s * 0.08 - r * 0.9, cx + s * 0.03, cy - s * 0.08 - r * 0.6], fill=acc)
+    d.ellipse([cx - s * 0.08, cy - s * 0.16, cx + s * 0.08, cy], fill=(50, 50, 62), outline=acc, width=3)
+    for sx in (-1, 1):   # pedals
+        rr(d, [cx + sx * s * 0.2 - s * 0.07, cy + r - s * 0.02, cx + sx * s * 0.2 + s * 0.07, cy + r + s * 0.14], 6, fill=(60, 60, 74), outline=(170, 170, 185), width=2)
+
+SIL = dict(gaminglaptop=sil_gaminglaptop, vr=sil_vr, camera=sil_camera, controller=sil_controller, gamingheadset=sil_gamingheadset, wheel=sil_wheel,
+           phone=sil_phone, laptop=sil_laptop, headphones=sil_headphones, console=sil_console, monitor=sil_monitor,
            keyboard=sil_keyboard, tablet=sil_tablet, earbuds=sil_earbuds, watch=sil_watch, speaker=sil_speaker)
 
 def make(name, brand, model, wcm, hcm, specs, sil):
@@ -219,7 +282,7 @@ def make(name, brand, model, wcm, hcm, specs, sil):
     return img
 
 if __name__ == "__main__":
-    sheet = Image.new("RGB", (5 * 260, 2 * 260), (30, 30, 34))
+    sheet = Image.new("RGB", (5 * 260, 4 * 260), (30, 30, 34))
     for i, p in enumerate(PRODUCTS):
         im = make(*p).resize((250, 250))
         sheet.paste(im, ((i % 5) * 260 + 5, (i // 5) * 260 + 5))
