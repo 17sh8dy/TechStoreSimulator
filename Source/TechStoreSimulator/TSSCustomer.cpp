@@ -1,4 +1,5 @@
 #include "TSSCustomer.h"
+#include "TSSBusinessSubsystem.h"
 #include "TSSRegister.h"
 #include "TSSCharacter.h"
 #include "TSSHumanComponent.h"
@@ -59,6 +60,7 @@ void ATSSCustomer::Begin(ATSSRegister* InRegister, float InSpeedScale)
 	Register = InRegister;
 	SpeedScale = InSpeedScale;
 	MaxMarkup = FMath::FRandRange(1.45f, 2.1f);
+	if (const UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) MaxMarkup *= Biz->PriceToleranceMultiplier();
 
 	// Cast a person: face, clothes and shoes picked at random so a crowd does not look cloned.
 	auto Pick = [](const TArray<FString>& V) { return V[FMath::RandRange(0, V.Num() - 1)]; };

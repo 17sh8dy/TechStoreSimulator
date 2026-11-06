@@ -45,4 +45,11 @@ public:
 	// What is on the shelves, and the shelf price of each product (indexed by ETSSProduct)
 	UPROPERTY() TArray<FTSSShelfSave> ShelfStock;
 	UPROPERTY() TArray<int32> Prices;
+
+	// Back room, staff, deals, and the money that went on them
+	UPROPERTY() TArray<FTSSOrderLine> Storage;
+	UPROPERTY() bool bCashierHired = false;
+	UPROPERTY() TArray<FTSSActiveContract> Contracts;
+	UPROPERTY() int32 WageSpend = 0;
+	UPROPERTY() int32 ContractSpend = 0;
 };

@@ -4,6 +4,7 @@
 #include "TSSProductItem.h"
 #include "TSSRegisterDevice.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSBusinessSubsystem.h"
 #include "Components/ChildActorComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -502,6 +503,63 @@ void ATSSRegister::Tick(float Dt)
 	case ETSSCheckoutPhase::Receipt:
 		PhaseTimer -= Dt;
 		if (PhaseTimer <= 0.f) TakeReceipt();
+		break;
+	default:
+		break;
+	}
+
+	if (const UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>())
+	{
+		if (Biz->HasCashier()) RunCashier(Dt);
+	}
+}
+
+void ATSSRegister::RunCashier(float Dt)
+{
+	// Each new step starts after a pause; the owner can always get in first.
+	if (Phase != CashierSeenPhase)
+	{
+		CashierSeenPhase = Phase;
+		CashierTimer = (Phase == ETSSCheckoutPhase::Scanning) ? 1.8f : 1.2f;
+		return;
+	}
+	CashierTimer -= Dt;
+	if (CashierTimer > 0.f) return;
+
+	switch (Phase)
+	{
+	case ETSSCheckoutPhase::Scanning:
+		if (!AllItemsPlaced()) return;
+		for (ATSSProductItem* I : Items)
+		{
+			if (I && !I->bScanned)
+			{
+				FString Why;
+				const bool bOk = ScanItem(I, Why);
+				if (ATSSScanner* S = GetScanner()) S->Beep(bOk);
+				CashierTimer = 0.8f;
+				return;
+			}
+		}
+		KeyboardPress();   // everything is scanned: charge
+		break;
+	case ETSSCheckoutPhase::CardReady:
+		ProcessCard();
+		break;
+	case ETSSCheckoutPhase::CashDue:
+	{
+		// Count out the change, biggest bills first, then confirm.
+		ChangeBills.Reset();
+		int32 Left = ChangeDue;
+		for (int32 d = TSSMoney::NumDenoms - 1; d >= 0; --d)
+		{
+			while (Left >= TSSMoney::Denoms[d]) { ChangeBills.Add(TSSMoney::Denoms[d]); Left -= TSSMoney::Denoms[d]; }
+		}
+		ConfirmChange();
+		break;
+	}
+	case ETSSCheckoutPhase::Receipt:
+		TakeReceipt();
 		break;
 	default:
 		break;

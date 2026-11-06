@@ -24,6 +24,7 @@ namespace
 		if (UMaterialInstanceDynamic** Found = Cache.Find(P)) { if (*Found && (*Found)->IsValidLowLevel()) return *Found; }
 		UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/TSS/Materials/M_Packaging.M_Packaging"));
 		const FString TexName = TSSProductDef(P).Texture;
+		if (TexName.IsEmpty()) return nullptr;   // no packaging art yet: plain coloured box
 		UTexture2D* Tex = LoadObject<UTexture2D>(nullptr, *FString::Printf(TEXT("/Game/TSS/Textures/%s.%s"), *TexName, *TexName));
 		if (!Base || !Tex) return nullptr;
 		UMaterialInstanceDynamic* M = UMaterialInstanceDynamic::Create(Base, GetTransientPackage());

@@ -310,7 +310,8 @@ public:
 			const FTSSProductDef& Def = TSSProductDef(P);
 			const int32 Qty = C.Cart.FindRef(P);
 			const bool bSel = C.Selected == P;
-			const bool bProductLocked = Def.MinLevel > C.Biz->GetLevel();
+			const bool bProductLocked = !C.Biz->IsProductAvailable(P);
+			const bool bNeedsUpgrade = Def.MinLevel <= C.Biz->GetLevel() && bProductLocked;
 			Catalog->AddSlot().AutoHeight().Padding(0.f, 2.f)
 			[
 				SNew(SHorizontalBox)
@@ -325,7 +326,7 @@ public:
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.f)[ SNew(SBox).MinDesiredWidth(118.f)[ DskTxt(Def.Name, 16, true) ] ]
 						+ SHorizontalBox::Slot().AutoWidth().Padding(10.f, 0.f)[ DskTxt(DskMoney(Def.WholesaleCost), 15, true) ]
-						+ SHorizontalBox::Slot().AutoWidth()[ DskTxt(bProductLocked ? FString::Printf(TEXT("LOCKED lvl %d"), Def.MinLevel) : FString::Printf(TEXT("stock %d"), DskUnitsOnShelves(C.World, P)), 14, bProductLocked, bProductLocked ? Th().Bad : Th().Dim) ]
+						+ SHorizontalBox::Slot().AutoWidth()[ DskTxt(bNeedsUpgrade ? FString(TEXT("NEEDS UPGRADE")) : bProductLocked ? FString::Printf(TEXT("LOCKED lvl %d"), Def.MinLevel) : FString::Printf(TEXT("stock %d"), DskUnitsOnShelves(C.World, P)), 14, bProductLocked, bProductLocked ? Th().Bad : Th().Dim) ]
 					]
 				]
 				+ SHorizontalBox::Slot().AutoWidth()[ DskButton(TEXT("-"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Max(0, Q - 1); Ctx->Refresh(); }, Qty > 0) ]
@@ -333,8 +334,8 @@ public:
 				[
 					SNew(SBox).MinDesiredWidth(26.f)[ DskTxt(FString::FromInt(Qty), 17, true, Qty > 0 ? Th().Heading : Th().Dim) ]
 				]
-				+ SHorizontalBox::Slot().AutoWidth()[ DskButton(TEXT("+"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Min(50, Q + 1); Ctx->Refresh(); }, !bProductLocked) ]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f)[ DskButton(TEXT("+5"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Min(50, Q + 5); Ctx->Refresh(); }, !bProductLocked) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ DskButton(TEXT("+"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Min(Ctx->Biz->MaxCartQty(), Q + 1); Ctx->Refresh(); }, !bProductLocked) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f)[ DskButton(TEXT("+5"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Min(Ctx->Biz->MaxCartQty(), Q + 5); Ctx->Refresh(); }, !bProductLocked) ]
 			];
 		}
 
@@ -352,7 +353,8 @@ public:
 			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Fits per shelf slot"), FString::FromInt(Sel.SlotCapacity())) ]
 			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Category"), Sel.Category) ]
 			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Brand"), Sel.Brand) ]
-			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Unlocks at business level"), FString::FromInt(Sel.MinLevel), Sel.MinLevel > 1, Sel.MinLevel > C.Biz->GetLevel() ? Th().Bad : Th().Ink) ]);
+			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Unlocks at business level"), FString::FromInt(Sel.MinLevel), Sel.MinLevel > 1, Sel.MinLevel > C.Biz->GetLevel() ? Th().Bad : Th().Ink) ]
+			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Also needs upgrade"), Sel.RequiresUpgrade[0] ? FString(Sel.RequiresUpgrade) : FString(TEXT("-")), false, (Sel.RequiresUpgrade[0] && !C.Biz->HasUpgrade(Sel.RequiresUpgrade)) ? Th().Bad : Th().Ink) ]);
 
 		// Cart summary.
 		TArray<FTSSOrderLine> Lines;
@@ -470,6 +472,12 @@ public:
 			}
 		}
 
+		TSharedRef<SVerticalBox> BackRoomList = SNew(SVerticalBox);
+		for (const FTSSOrderLine& L : C.Biz->GetStorage())
+		{
+			BackRoomList->AddSlot().AutoHeight()[ DskRow2(FString::Printf(TEXT("    %s"), TSSProductDef(L.Product).Name), FString::Printf(TEXT("%d"), L.Qty), false, Th().Dim) ];
+		}
+
 		TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
 		for (const FTSSUpgradeDef& Def : UTSSBusinessSubsystem::UpgradeCatalog())
 		{
@@ -512,7 +520,9 @@ public:
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Store size"), FString::Printf(TEXT("%s  (%d x %d m)"), TSSStoreLayout::StageName(C.Biz->GetStoreStage()), FMath::RoundToInt(TSSStoreLayout::Length(C.Biz->GetStoreStage()) / 100.f), FMath::RoundToInt(TSSStoreLayout::HalfWidth(C.Biz->GetStoreStage()) / 50.f)), true) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Shelf units"), FString::FromInt(Shelves)) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Shelf slots in use"), FString::Printf(TEXT("%d / %d"), UsedSlots, Slots)) ]
-						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Products on shelves"), FString::FromInt(Units)) ])
+						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Products on shelves"), FString::FromInt(Units)) ]
+							+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Back room"), C.Biz->HasUpgrade(TEXT("storage")) ? FString::Printf(TEXT("%d / %d units"), C.Biz->GetStoredTotal(), UTSSBusinessSubsystem::StorageCapacity) : FString(TEXT("not built")), false, C.Biz->HasUpgrade(TEXT("storage")) ? Th().Ink : Th().Dim) ]
+							+ SVerticalBox::Slot().AutoHeight()[ BackRoomList ])
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)[ DskTxt(TEXT("Upgrades"), 18, true) ]
 				+ SVerticalBox::Slot().AutoHeight()[ List ]
@@ -532,7 +542,7 @@ public:
 	virtual TSharedRef<SWidget> Build(FTSSDeskContext& C) const override
 	{
 		UTSSStoreSubsystem* S = C.Store;
-		const int32 Net = S->GetLifetimeRevenue() - S->GetOrderSpend() - S->GetUpgradeSpend();
+		const int32 Net = S->GetLifetimeRevenue() - S->GetOrderSpend() - S->GetUpgradeSpend() - S->GetWageSpend() - S->GetContractSpend();
 
 		TSharedRef<SVerticalBox> Recent = SNew(SVerticalBox);
 		const TArray<FTSSTransaction>& T = S->GetTransactions();
@@ -568,7 +578,9 @@ public:
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Sales tax collected"), DskMoney(S->GetTaxCollected())) ]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskRow2(TEXT("Spent on stock orders"), DskMoney(S->GetOrderSpend())) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Spent on upgrades"), DskMoney(S->GetUpgradeSpend())) ]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskRow2(TEXT("Net (revenue - orders - upgrades)"), DskMoney(Net), true, Net >= 0 ? Th().Good : Th().Bad) ])
+						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Staff: hiring and wages"), DskMoney(S->GetWageSpend())) ]
+						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Contracts signed"), DskMoney(S->GetContractSpend())) ]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskRow2(TEXT("Net (revenue - all spending)"), DskMoney(Net), true, Net >= 0 ? Th().Good : Th().Bad) ])
 				]
 				+ SVerticalBox::Slot().AutoHeight()
 				[
@@ -591,11 +603,12 @@ public:
 	FLockedPage(const TCHAR* InTitle, int32 InLevel, const TCHAR* InBlurb) : TitleText(InTitle), Level(InLevel), Blurb(InBlurb) {}
 	virtual FText Title() const override { return FText::FromString(TitleText); }
 	virtual int32 RequiredLevel() const override { return Level; }
-	virtual FString Badge(int32 PlayerLevel) const override { return PlayerLevel < Level ? TEXT("LOCKED") : TEXT("NOT YET"); }
+	virtual FString Badge(int32 PlayerLevel) const override { return PlayerLevel < Level ? TEXT("LOCKED") : (HasContent() ? TEXT("") : TEXT("NOT YET")); }
 	virtual TSharedRef<SWidget> Build(FTSSDeskContext& C) const override
 	{
 		const FTSSDashboard D = C.Biz->GetDashboard();
 		const bool bReached = D.Level >= Level;
+		if (bReached && HasContent()) return BuildOpen(C);
 		const int32 NeedXP = UTSSBusinessSubsystem::XPForLevel(Level);
 		return SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight()[ DskHeading(TitleText) ]
@@ -611,10 +624,105 @@ public:
 				+ SVerticalBox::Slot().AutoHeight()[ DskWrapped(Blurb, 14, Th().Dim) ]) ];
 	}
 
-private:
+protected:
+	/** A subclass that is really in the game says so and builds its section here. */
+	virtual bool HasContent() const { return false; }
+	virtual TSharedRef<SWidget> BuildOpen(FTSSDeskContext& C) const { return SNullWidget::NullWidget; }
 	FString TitleText;
 	int32 Level;
 	FString Blurb;
+};
+
+// =================================================================================================
+// Employees
+// =================================================================================================
+
+class FEmployeesPage : public FLockedPage
+{
+public:
+	FEmployeesPage() : FLockedPage(TEXT("Employees"), 4, TEXT("Hire and manage staff: cashiers, stockers and managers.")) {}
+	virtual bool HasContent() const override { return true; }
+	virtual TSharedRef<SWidget> BuildOpen(FTSSDeskContext& C) const override
+	{
+		FTSSDeskContext* Ctx = &C;
+		const bool bLicensed = C.Biz->HasUpgrade(TEXT("employee"));
+		const bool bHired = C.Biz->HasCashier();
+		FString Why;
+		const bool bCanHire = C.Biz->CanHireCashier(Why);
+
+		TSharedRef<SWidget> Cashier = DskPanel(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ DskTxt(TEXT("Cashier"), 18, true, Th().Heading) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 4.f)[ DskWrapped(TEXT("Stands at the register and runs it: scans the items, charges the customer, counts out the change and hands over the receipt. You can still serve a customer yourself, and you will always be quicker."), 14, Th().Dim) ]
+				+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Hiring fee"), DskMoney(UTSSBusinessSubsystem::CashierHireFee)) ]
+				+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Wage, paid at the start of each day"), DskMoney(UTSSBusinessSubsystem::CashierWage)) ]
+				+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Status"), bHired ? FString(TEXT("ON DUTY")) : (bLicensed ? FString(TEXT("vacant")) : FString(TEXT("needs the Hire a Cashier upgrade"))), true, bHired ? Th().Good : Th().Dim) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.f, 0.f, 0.f, 0.f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ DskButton(TEXT("HIRE"), [Ctx]() { FString Msg; Ctx->bMessageIsError = !Ctx->Biz->HireCashier(Msg); Ctx->Message = Msg; Ctx->Refresh(); }, bCanHire) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[ DskButton(TEXT("DISMISS"), [Ctx]() { Ctx->Biz->DismissCashier(); Ctx->bMessageIsError = false; Ctx->Message = TEXT("The cashier has been let go."); Ctx->Refresh(); }, bHired) ]
+			], Th().Panel2, 8.f);
+
+		return SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()[ DskHeading(TEXT("Employees")) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[ DskWrapped(TEXT("Wages come out of your cash every morning. If you cannot pay, the employee quits."), 14, Th().Dim) ]
+			+ SVerticalBox::Slot().AutoHeight()[ Cashier ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f)[ DskTxt(C.Message, 14, true, C.bMessageIsError ? Th().Bad : Th().Good) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f)[ DskTxt(TEXT("Stockers and managers are planned for later."), 13, false, Th().Dim) ];
+	}
+};
+
+// =================================================================================================
+// Contracts
+// =================================================================================================
+
+class FContractsPage : public FLockedPage
+{
+public:
+	FContractsPage() : FLockedPage(TEXT("Contracts"), 5, TEXT("Sign bulk supplier deals and take on corporate customers.")) {}
+	virtual bool HasContent() const override { return true; }
+	virtual TSharedRef<SWidget> BuildOpen(FTSSDeskContext& C) const override
+	{
+		FTSSDeskContext* Ctx = &C;
+		TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
+		for (const FTSSContractDef& Def : UTSSBusinessSubsystem::ContractCatalog())
+		{
+			const FName Id(Def.Id);
+			FString Why;
+			const bool bCan = C.Biz->CanSignContract(Def, Why);
+			const bool bActive = C.Biz->IsContractActive(Id);
+			const FString Status = bActive ? FString::Printf(TEXT("ACTIVE  -  %d day%s left"), C.Biz->ContractDaysLeft(Id), C.Biz->ContractDaysLeft(Id) == 1 ? TEXT("") : TEXT("s"))
+				: (C.Biz->GetLevel() < Def.MinLevel ? FString::Printf(TEXT("LOCKED  -  level %d"), Def.MinLevel) : FString::Printf(TEXT("%s for %d days"), *DskMoney(Def.Cost), Def.Days));
+			List->AddSlot().AutoHeight().Padding(0.f, 3.f)
+			[
+				DskPanel(SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.f)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[ DskTxt(Def.Name, 16, true, bActive ? Th().Good : Th().Ink) ]
+						+ SVerticalBox::Slot().AutoHeight()[ DskWrapped(Def.Description, 13, Th().Dim) ]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f)[ DskTxt(Status, 14, true, bActive ? Th().Good : Th().Heading) ]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						DskButton(bActive ? TEXT("Running") : TEXT("SIGN"), [Ctx, Id]() { FString Msg; Ctx->bMessageIsError = !Ctx->Biz->SignContract(Id, Msg); Ctx->Message = Msg; Ctx->Refresh(); }, bCan)
+					], Th().Panel2, 6.f)
+			];
+		}
+		return SNew(SScrollBox)
+			+ SScrollBox::Slot()
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ DskHeading(TEXT("Contracts")) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[ DskWrapped(TEXT("A contract runs for a number of shop days, counting today, then lapses. You can sign it again once it has."), 14, Th().Dim) ]
+				+ SVerticalBox::Slot().AutoHeight()[ List ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f)[ DskTxt(C.Message, 14, true, C.bMessageIsError ? Th().Bad : Th().Good) ]
+			];
+	}
 };
 
 class FResearchPage : public FTSSDeskPage
@@ -672,8 +780,8 @@ const TArray<TSharedRef<FTSSDeskPage>>& TSSDeskPages()
 		MakeShared<FProfilePage>(),
 		MakeShared<FOrderingPage>(),
 		MakeShared<FManagementPage>(),
-		MakeShared<FLockedPage>(TEXT("Employees"), 4, TEXT("Hire and manage staff: cashiers, stockers and managers.")),
-		MakeShared<FLockedPage>(TEXT("Contracts"), 5, TEXT("Sign bulk supplier deals and take on corporate customers.")),
+		MakeShared<FEmployeesPage>(),
+		MakeShared<FContractsPage>(),
 		MakeShared<FFinancesPage>(),
 		MakeShared<FResearchPage>(),
 	};

@@ -21,6 +21,7 @@
 #include "TSSBusinessSave.h"
 #include "TSSDeliveryActors.h"
 #include "TSSBusinessSubsystem.h"
+#include "TSSEmployee.h"
 #include "TSSStoreDeskComputer.h"
 #include "TSSStoreDeskWidget.h"
 #include "TSSRegisterDevice.h"
@@ -604,7 +605,8 @@ void ATSSPlayerController::TSSCustomerTest()
 		float Elapsed = 0.f;   // time in the current step
 		int32 Fails = 0;
 		bool BagSeen = false, StrayPanel = false;
-		TMap<ETSSProduct, int32> OldPrices;
+		bool CashierShot = false;
+TMap<ETSSProduct, int32> OldPrices;
 	};
 	TSharedRef<FState> St = MakeShared<FState>();
 
@@ -812,10 +814,13 @@ void ATSSPlayerController::TSSCustomerTest()
 			{
 				Check(TEXT("a customer arriving at a closed shop turns away: no sale, nothing on the counter"),
 					Store->GetServed() == St->Served0 && Reg->GetPhase() == ETSSCheckoutPhase::Idle && Reg->GetItems().Num() == 0);
-				Check(TEXT("and turning away is not counted as an unhappy walk-out"), Store->GetLost() == St->Lost0);
-				Store->SetOpen(true);
-				St->Run = 99;
-			}
+					Check(TEXT("and turning away is not counted as an unhappy walk-out"), Store->GetLost() == St->Lost0);
+					Store->SetOpen(true);
+					// Run 4: a hired cashier serves a customer start to finish with no help from the player.
+					if (UTSSBusinessSubsystem* Biz4 = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz4->SetCashierForTest(true);
+					St->Run = 4;
+					Spawn(ETSSPayMethod::Cash);
+				}
 			else if (Reg->GetPhase() != ETSSCheckoutPhase::Idle || bTimeout)
 			{
 				Check(TEXT("a customer arriving at a closed shop turns away: no sale, nothing on the counter"), false);
@@ -823,9 +828,35 @@ void ATSSPlayerController::TSSCustomerTest()
 				St->Run = 99;
 			}
 		}
-		else if (St->Run == 2)
-		{
-			if (Store->GetLost() > St->Lost0)
+else if (St->Run == 4)
+{
+if (!St->CashierShot && (Reg->GetPhase() == ETSSCheckoutPhase::CashDue || Reg->GetPhase() == ETSSCheckoutPhase::CardReady))
+{
+	St->CashierShot = true;
+	Snap(FVector(-190.f, -20.f, 0.f), FVector(105.f, -95.f, 105.f));
+}
+if (!St->Customer.IsValid())
+				{
+					UTSSBusinessSubsystem* Biz4 = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>();
+					Check(TEXT("a hired cashier completed the whole sale on their own"), Store->GetServed() == St->Served0 + 1 && Store->GetTransactions().Num() == St->Txns0 + 1);
+					Check(TEXT("and the money went into the till"), Store->GetMoney() > St->Money0);
+					Check(TEXT("the cashier left the register free for the next customer"), Reg->GetPhase() == ETSSCheckoutPhase::Idle && Reg->GetItems().Num() == 0);
+					bool bBody = false;
+					for (TActorIterator<ATSSEmployee> EIt(GetWorld()); EIt; ++EIt) bBody = true;
+					Check(TEXT("the cashier is a person standing in the shop"), bBody);
+					if (Biz4) Biz4->SetCashierForTest(false);
+					St->Run = 99;
+				}
+				else if (St->Elapsed > 150.f)
+				{
+					Check(TEXT("a hired cashier completed the whole sale on their own"), false);
+					if (UTSSBusinessSubsystem* Biz4 = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz4->SetCashierForTest(false);
+					St->Run = 99;
+				}
+			}
+			else if (St->Run == 2)
+			{
+				if (Store->GetLost() > St->Lost0)
 			{
 				Check(TEXT("an overpriced shop loses the customer"), true);
 				for (const TPair<ETSSProduct, int32>& KV : St->OldPrices) Store->SetPrice(KV.Key, KV.Value);
@@ -1087,7 +1118,7 @@ void ATSSPlayerController::TSSDeskTest()
 			Check(TEXT("Employees and Contracts are locked sections with a level requirement"),
 				TSSDeskPages().Num() == 8 && TSSDeskPages()[4]->RequiredLevel() > 0 && TSSDeskPages()[5]->RequiredLevel() > 0
 				&& TSSDeskPages()[4]->Badge(1) == TEXT("LOCKED") && TSSDeskPages()[0]->RequiredLevel() == 0);
-			Check(TEXT("a section stays marked once its level is reached but it is not built"), TSSDeskPages()[4]->Badge(TSSDeskPages()[4]->RequiredLevel()) == TEXT("NOT YET"));
+Check(TEXT("Employees and Contracts are real sections once their level is reached"), TSSDeskPages()[4]->Badge(TSSDeskPages()[4]->RequiredLevel()).IsEmpty() && TSSDeskPages()[5]->Badge(TSSDeskPages()[5]->RequiredLevel()).IsEmpty() && TSSDeskPages()[7]->Badge(99).IsEmpty());
 			// Screenshots of the interface and the computer.
 			ConsoleCommand(TEXT("TSSLook 640 0 90 180 -3")); // overview of the shop (expanded, if the test could afford it)
 			Snap();
@@ -1137,9 +1168,92 @@ void ATSSPlayerController::TSSDeskTest()
 			St->Hold = 1.6f; St->Step = 7;
 			break;
 		}
-		default:
-			Done();
-			break;
-		}
-	}, 0.2f, true);
-}
+			case 7: // the new upgrades, staff, deals and products, by their real functions
+			{
+				Store->Earn(500000);
+				Biz->AddXP(FMath::Max(0, UTSSBusinessSubsystem::XPForLevel(8) - Biz->GetXP()));
+				FString Msg;
+				for (const TCHAR* Id : { TEXT("store_1"), TEXT("store_2"), TEXT("supplier_premium"), TEXT("equipment"), TEXT("storage"), TEXT("dept_gaming"), TEXT("employee") })
+				{
+					if (!Biz->HasUpgrade(Id)) Biz->BuyUpgrade(Id, Msg);
+				}
+				Check(TEXT("all five formerly planned upgrades can now be bought"),
+					Biz->HasUpgrade(TEXT("supplier_premium")) && Biz->HasUpgrade(TEXT("equipment")) && Biz->HasUpgrade(TEXT("storage")) && Biz->HasUpgrade(TEXT("dept_gaming")) && Biz->HasUpgrade(TEXT("employee")));
+				bool bAllReal = true;
+				for (const FTSSUpgradeDef& U : UTSSBusinessSubsystem::UpgradeCatalog()) if (!U.bImplemented) bAllReal = false;
+				Check(TEXT("no upgrade in the catalogue is marked as planned any more"), bAllReal);
+				Check(TEXT("premium and gaming products are available once their upgrade is owned"),
+					Biz->IsProductAvailable(ETSSProduct::GamingLaptop) && Biz->IsProductAvailable(ETSSProduct::Controller) && Biz->IsProductAvailable(ETSSProduct::RacingWheel));
+				Check(TEXT("the improved computer doubles the order size"), Biz->MaxCartQty() == 100);
+
+				// Back room: a shelf slot that sold out is refilled from storage.
+				ATSSShelf* StockShelf = nullptr;
+				int32 StockSlot = -1;
+				for (TActorIterator<ATSSShelf> SIt(GetWorld()); SIt && !StockShelf; ++SIt)
+				{
+					for (int32 s = 0; s < ATSSShelf::Tiers * ATSSShelf::Columns; ++s)
+					{
+						if (SIt->GetSlotQty(s) > 0) { StockShelf = *SIt; StockSlot = s; break; }
+					}
+				}
+				Check(TEXT("a stocked shelf slot exists to test the back room with"), StockShelf != nullptr);
+				if (StockShelf)
+				{
+					const ETSSProduct P = StockShelf->GetSlotProduct(StockSlot);
+					const int32 Before = Biz->GetStored(P);
+					Check(TEXT("units can be sent to the back room"), Biz->StoreInBackRoom(P, 6) && Biz->GetStored(P) == Before + 6);
+					ETSSProduct Took = ETSSProduct::None;
+					while (StockShelf->GetSlotQty(StockSlot) > 0) StockShelf->TakeOne(StockSlot, Took);
+					Check(TEXT("the slot is now empty but remembers what it held"), StockShelf->GetSlotQty(StockSlot) == 0 && StockShelf->GetSlotWanted(StockSlot) == P);
+					const int32 Moved = Biz->RestockShelvesFromStorage(1);
+					Check(TEXT("the back room refills a sold-out slot with its product"), Moved == 1 && StockShelf->GetSlotQty(StockSlot) == 1 && StockShelf->GetSlotProduct(StockSlot) == P && Biz->GetStored(P) == Before + 5);
+					Check(TEXT("the back room refuses more than it can hold"), !Biz->StoreInBackRoom(P, UTSSBusinessSubsystem::StorageCapacity));
+				}
+
+				// Staff: hiring costs the fee and puts a person in the shop; dismissing takes them out.
+				const int32 Money0 = Store->GetMoney();
+				const int32 Wage0 = Store->GetWageSpend();
+				Check(TEXT("a cashier can be hired once the upgrade is owned"), Biz->HireCashier(Msg) && Biz->HasCashier());
+				Check(TEXT("hiring cost the fee, and it shows in the books"), Store->GetMoney() == Money0 - UTSSBusinessSubsystem::CashierHireFee && Store->GetWageSpend() == Wage0 + UTSSBusinessSubsystem::CashierHireFee);
+				Check(TEXT("only one cashier can be hired"), !Biz->HireCashier(Msg));
+				Biz->DismissCashier();
+				Check(TEXT("a cashier can be dismissed"), !Biz->HasCashier());
+
+				// Contracts: bought, effective, and they lapse.
+				const int32 Cost0 = Biz->OrderCost({ { ETSSProduct::Phone, 10 } });
+				const int32 CSpend0 = Store->GetContractSpend();
+				Check(TEXT("a bulk deal can be signed"), Biz->SignContract(TEXT("bulk_deal"), Msg) && Biz->IsContractActive(TEXT("bulk_deal")));
+				Check(TEXT("the bulk deal cuts the wholesale price by 15%"), Biz->OrderCost({ { ETSSProduct::Phone, 10 } }) == FMath::RoundToInt(Cost0 * 0.85f));
+				Check(TEXT("the deal's cost shows in the books"), Store->GetContractSpend() > CSpend0);
+				Check(TEXT("the same deal cannot be signed twice"), !Biz->SignContract(TEXT("bulk_deal"), Msg));
+				Check(TEXT("a deal lasts three days counting today"), Biz->ContractDaysLeft(TEXT("bulk_deal")) == 3);
+				Check(TEXT("the other deals change customers' behaviour"), Biz->SignContract(TEXT("promo"), Msg) && Biz->CustomerRateMultiplier() == 2.f && Biz->SignContract(TEXT("corporate"), Msg) && Biz->PriceToleranceMultiplier() > 1.2f);
+				Store->StartDay(Store->GetDay() + 3);
+				Biz->SaveNow();
+				UTSSBusinessSave* Saved = Cast<UTSSBusinessSave>(UGameplayStatics::LoadGameFromSlot(Biz->GetSlotName(), 0));
+				Check(TEXT("the save holds the back room, the wage and contract spending"), Saved && Saved->Storage.Num() > 0 && Saved->WageSpend == Store->GetWageSpend() && Saved->ContractSpend == Store->GetContractSpend() && Saved->Contracts.Num() == 3);
+				Check(TEXT("a premium product can be ordered, and a gaming one"), [&]()
+				{
+					FString Why;
+					int32 Id1 = 0;
+					return Biz->PlaceOrder({ { ETSSProduct::Camera, 1 }, { ETSSProduct::Controller, 2 } }, Why, &Id1) && Id1 > 0;
+				}());
+
+				ConsoleCommand(TEXT("TSSLook 640 0 90 180 -3"));
+				GetDesk()->SetDark(false);
+				TSSDeskPage(4);
+				Snap();
+				St->Hold = 1.6f; St->Step = 8; St->Elapsed = 0.f;
+				break;
+			}
+			case 8:
+				TSSDeskPage(5);
+				Snap();
+				St->Hold = 1.6f; St->Step = 9;
+				break;
+			default:
+				Done();
+				break;
+			}
+		}, 0.2f, true);
+	}

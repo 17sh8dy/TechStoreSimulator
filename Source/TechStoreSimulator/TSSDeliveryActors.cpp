@@ -107,7 +107,22 @@ void ATSSParcel::Tick(float DeltaSeconds)
 FString ATSSParcel::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
 {
 	if (Player->GetHeld() != ETSSProduct::None || Player->GetHeldItem()) return TEXT("Your hands are full");
-	return FString::Printf(TEXT("[E] Unpack a %s  (%d left in this box)"), TSSProductDef(Product).Name, Qty);
+	FString Out = FString::Printf(TEXT("[E] Unpack a %s  (%d left in this box)"), TSSProductDef(Product).Name, Qty);
+	if (const UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>())
+	{
+		if (Biz->HasUpgrade(TEXT("storage"))) Out += FString::Printf(TEXT("\n[Mouse Wheel] Send the box to the back room  (%d / %d stored)"), Biz->GetStoredTotal(), UTSSBusinessSubsystem::StorageCapacity);
+	}
+	return Out;
+}
+
+void ATSSParcel::Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Direction)
+{
+	UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>();
+	if (!Biz || Qty <= 0 || !Biz->StoreInBackRoom(Product, Qty)) return;
+	const int32 Moved = Qty;
+	Qty = 0;
+	for (int32 i = 0; i < Moved; ++i) Biz->OnUnitUnloaded(OrderId);
+	Destroy();
 }
 
 void ATSSParcel::Interact(ATSSCharacter* Player, const FHitResult& Hit)

@@ -60,6 +60,10 @@ public:
 	/** Spending that StoreDesk does goes through TrySpend, then is noted here for the finance page. */
 	void NoteOrderSpend(int32 Amount) { OrderSpend += Amount; OnChanged.Broadcast(); }
 	void NoteUpgradeSpend(int32 Amount) { UpgradeSpend += Amount; OnChanged.Broadcast(); }
+	void NoteWageSpend(int32 Amount) { WageSpend += Amount; OnChanged.Broadcast(); }
+	void NoteContractSpend(int32 Amount) { ContractSpend += Amount; OnChanged.Broadcast(); }
+	int32 GetWageSpend() const { return WageSpend; }
+	int32 GetContractSpend() const { return ContractSpend; }
 
 	void ExportTo(UTSSBusinessSave* Save) const;
 	void ImportFrom(const UTSSBusinessSave* Save);
@@ -81,6 +85,8 @@ private:
 	int32 ProductsSold = 0;
 	int32 OrderSpend = 0;
 	int32 UpgradeSpend = 0;
+	int32 WageSpend = 0;
+	int32 ContractSpend = 0;
 	int32 Day = 1;
 	bool bOpen = true;
 	bool bSimPaused = true;

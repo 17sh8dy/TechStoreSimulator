@@ -168,6 +168,7 @@ void ATSSShelf::RefreshAllTags()
 void ATSSShelf::RefreshSlot(int32 Index)
 {
 	FSlot& Slot = Slots[Index];
+	if (Slot.Qty > 0) Slot.Last = Slot.Product;
 	const FTSSProductDef& Def = TSSProductDef(Slot.Product);
 
 	while (Slot.Boxes.Num() < Slot.Qty)
@@ -325,6 +326,7 @@ void ATSSShelf::ExportSlots(TArray<FTSSShelfSlotSave>& Out) const
 		FTSSShelfSlotSave& Item = Out.AddDefaulted_GetRef();
 		Item.Product = S.Qty > 0 ? S.Product : ETSSProduct::None;
 		Item.Qty = S.Qty > 0 ? S.Qty : 0;
+		Item.Last = S.Qty > 0 ? S.Product : S.Last;
 	}
 }
 
@@ -335,6 +337,7 @@ void ATSSShelf::ImportSlots(const TArray<FTSSShelfSlotSave>& In)
 		FSlot& S = Slots[i];
 		S.Product = ETSSProduct::None;
 		S.Qty = 0;
+		S.Last = (In.IsValidIndex(i) && In[i].Last != ETSSProduct::Count) ? In[i].Last : ETSSProduct::None;
 		if (In.IsValidIndex(i) && In[i].Product != ETSSProduct::None && In[i].Product != ETSSProduct::Count && In[i].Qty > 0)
 		{
 			S.Product = In[i].Product;

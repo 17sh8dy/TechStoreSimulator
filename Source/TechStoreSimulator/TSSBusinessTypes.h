@@ -32,6 +32,29 @@ struct FTSSShelfSlotSave
 
 	UPROPERTY() ETSSProduct Product = ETSSProduct::None;
 	UPROPERTY() int32 Qty = 0;
+	/** What the slot last held, so the back room knows what to refill it with once it sells out. */
+	UPROPERTY() ETSSProduct Last = ETSSProduct::None;
+};
+
+/** A supplier / customer deal that is running until the end of a shop day. */
+USTRUCT()
+struct FTSSActiveContract
+{
+	GENERATED_BODY()
+
+	UPROPERTY() FName Id;
+	/** The last day (inclusive) the deal applies. */
+	UPROPERTY() int32 EndDay = 0;
+};
+
+struct FTSSContractDef
+{
+	const TCHAR* Id;
+	const TCHAR* Name;
+	const TCHAR* Description;
+	int32 Cost;
+	int32 Days;
+	int32 MinLevel;
 };
 
 /** The stock on one shelf (Slots is tiers x columns, in slot order). */

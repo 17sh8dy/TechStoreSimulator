@@ -44,6 +44,8 @@ public:
 	static void CollectStock(UWorld* World, TArray<FTSSStockRef>& Out);
 	ETSSProduct GetSlotProduct(int32 Slot) const { return Slots[Slot].Product; }
 	int32 GetSlotQty(int32 Slot) const { return Slots[Slot].Qty; }
+	/** The product the back room should refill this slot with (what it holds, or held last); None if it never held anything. */
+	ETSSProduct GetSlotWanted(int32 Slot) const { return Slots[Slot].Qty > 0 ? Slots[Slot].Product : Slots[Slot].Last; }
 	/** Saving: the contents of every slot, and putting them back. Import clamps to what a slot can hold. */
 	void ExportSlots(TArray<FTSSShelfSlotSave>& Out) const;
 	void ImportSlots(const TArray<FTSSShelfSlotSave>& In);
@@ -63,6 +65,7 @@ private:
 	{
 		ETSSProduct Product = ETSSProduct::None;
 		int32 Qty = 0;
+		ETSSProduct Last = ETSSProduct::None;   // what this slot held most recently (kept after it sells out)
 		TArray<TObjectPtr<UTSSProductBoxComponent>> Boxes;
 	};
 

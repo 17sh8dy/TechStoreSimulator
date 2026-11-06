@@ -68,6 +68,7 @@ void UTSSStoreSubsystem::ExportTo(UTSSBusinessSave* S) const
 	S->ProductsSold = ProductsSold; S->OrderSpend = OrderSpend; S->UpgradeSpend = UpgradeSpend; S->Day = Day;
 	S->Transactions = Transactions;
 	S->bStoreOpen = bOpen;
+	S->WageSpend = WageSpend; S->ContractSpend = ContractSpend;
 	S->Prices.Reset();
 	for (int32 i = 0; i < static_cast<int32>(ETSSProduct::Count); ++i) S->Prices.Add(Prices[i]);
 }
@@ -79,9 +80,8 @@ void UTSSStoreSubsystem::ImportFrom(const UTSSBusinessSave* S)
 	ProductsSold = S->ProductsSold; OrderSpend = S->OrderSpend; UpgradeSpend = S->UpgradeSpend; Day = FMath::Max(1, S->Day);
 	Transactions = S->Transactions;
 	bOpen = S->bStoreOpen;
-	if (S->Prices.Num() == static_cast<int32>(ETSSProduct::Count))
-	{
-		for (int32 i = 0; i < S->Prices.Num(); ++i) Prices[i] = FMath::Clamp(S->Prices[i], 1, 99999);
-	}
+	WageSpend = S->WageSpend; ContractSpend = S->ContractSpend;
+	// An older save may predate newer products: restore the prices it knows, leave the rest at their defaults.
+	for (int32 i = 0; i < S->Prices.Num() && i < static_cast<int32>(ETSSProduct::Count); ++i) Prices[i] = FMath::Clamp(S->Prices[i], 1, 99999);
 	OnChanged.Broadcast();
 }

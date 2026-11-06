@@ -52,6 +52,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual FString GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const override;
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) override;
+	/** Mouse wheel: with the Back-Room Storage upgrade, sends the whole box to the back room. */
+	virtual void Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Direction) override;
 
 	void Init(int32 InOrderId, ETSSProduct InProduct, int32 InQty);
 

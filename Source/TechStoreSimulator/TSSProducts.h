@@ -18,6 +18,14 @@ enum class ETSSProduct : uint8
 	Earbuds,
 	Smartwatch,
 	Speaker,
+	// Premium Supplier Access (supplier_premium upgrade)
+	GamingLaptop,
+	VRHeadset,
+	Camera,
+	// Gaming Department (dept_gaming upgrade)
+	Controller,
+	GamingHeadset,
+	RacingWheel,
 	Count UMETA(Hidden)
 };
 
@@ -37,6 +45,8 @@ struct FTSSProductDef
 	const TCHAR* Texture = TEXT("");
 	/** Business level needed before this can be ordered from the wholesaler. */
 	int32 MinLevel = 1;
+	/** Upgrade id that must be owned before this can be ordered (empty = none needed). */
+	const TCHAR* RequiresUpgrade = TEXT("");
 
 	/** How many of this box fit front-to-back in one shelf slot (shelf depth is 50 cm). */
 	int32 SlotCapacity() const { return FMath::Clamp(FMath::FloorToInt(46.f / BoxSize.X), 1, 4); }

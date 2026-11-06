@@ -126,6 +126,8 @@ private:
 	void ConfirmChange();
 	void Complete(ETSSPayMethod PaidBy);
 	void Reset();
+	/** With a cashier hired, works the till through each step after a short, human delay. */
+	void RunCashier(float Dt);
 
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
 	TArray<FLinearColor> PartColors;
@@ -157,4 +159,6 @@ private:
 	float PhaseTimer = 0.f;
 	FString Notice;
 	float NoticeTimer = 0.f;
+	ETSSCheckoutPhase CashierSeenPhase = ETSSCheckoutPhase::Idle;
+	float CashierTimer = 0.f;
 };

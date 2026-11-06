@@ -3,6 +3,7 @@
 #include "TSSRegister.h"
 #include "TSSShelf.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSBusinessSubsystem.h"
 #include "EngineUtils.h"
 
 bool UTSSCustomerSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -39,7 +40,9 @@ void UTSSCustomerSubsystem::Tick(float DeltaTime)
 
 	NextSpawnIn -= DeltaTime;
 	if (NextSpawnIn > 0.f) return;
-	NextSpawnIn = FMath::FRandRange(MinGap, MaxGap);
+	float RateScale = 1.f;
+	if (const UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) RateScale = Biz->CustomerRateMultiplier();
+	NextSpawnIn = FMath::FRandRange(MinGap, MaxGap) / FMath::Max(0.1f, RateScale);
 
 	int32 Count = 0;
 	for (TActorIterator<ATSSCustomer> It(GetWorld()); It; ++It) ++Count;

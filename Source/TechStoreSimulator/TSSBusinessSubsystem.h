@@ -108,6 +108,43 @@ public:
 	bool CanBuyUpgrade(const FTSSUpgradeDef& Def, FString& Why) const;
 	bool BuyUpgrade(FName Id, FString& Why);
 
+	/** Can this product be ordered right now (business level and any upgrade it needs)? */
+	bool IsProductAvailable(ETSSProduct Product, FString* Why = nullptr) const;
+	/** Most of one product a single order may hold (the improved computer doubles it). */
+	int32 MaxCartQty() const { return HasUpgrade(TEXT("equipment")) ? 100 : 50; }
+
+	// ---- back room (storage upgrade) ------------------------------------------------------------
+	static constexpr int32 StorageCapacity = 200;
+	int32 GetStored(ETSSProduct Product) const;
+	int32 GetStoredTotal() const;
+	const TArray<FTSSOrderLine>& GetStorage() const { return Storage; }
+	/** Moves units into the back room. False if there is no storage upgrade or it would not fit. */
+	bool StoreInBackRoom(ETSSProduct Product, int32 Qty);
+	/** Moves one unit from the back room onto a shelf slot that is short of it, every few seconds. Returns units moved (test hook). */
+	int32 RestockShelvesFromStorage(int32 MaxUnits = 1);
+
+	// ---- staff ----------------------------------------------------------------------------------
+	static constexpr int32 CashierHireFee = 150;
+	static constexpr int32 CashierWage = 80;   // paid at the start of every shop day
+	bool HasCashier() const { return bCashierHired; }
+	bool CanHireCashier(FString& Why) const;
+	bool HireCashier(FString& Why);
+	void DismissCashier();
+	/** Test hook: puts a cashier on or off duty without the upgrade, the fee or the Employees page. */
+	void SetCashierForTest(bool bOn);
+
+	// ---- contracts ------------------------------------------------------------------------------
+	static const TArray<FTSSContractDef>& ContractCatalog();
+	bool IsContractActive(FName Id) const;
+	int32 ContractDaysLeft(FName Id) const;   // counting today
+	bool CanSignContract(const FTSSContractDef& Def, FString& Why) const;
+	bool SignContract(FName Id, FString& Why);
+	const TArray<FTSSActiveContract>& GetContracts() const { return Contracts; }
+	/** Effects of running deals. */
+	float WholesaleMultiplier() const { return IsContractActive(TEXT("bulk_deal")) ? 0.85f : 1.f; }
+	float PriceToleranceMultiplier() const { return IsContractActive(TEXT("corporate")) ? 1.25f : 1.f; }
+	float CustomerRateMultiplier() const { return IsContractActive(TEXT("promo")) ? 2.f : 1.f; }
+
 	// ---- achievements ---------------------------------------------------------------------------
 	static const TArray<FTSSAchievementDef>& AchievementCatalog();
 	bool HasAchievement(FName Id) const { return Achievements.Contains(Id); }
@@ -128,6 +165,9 @@ public:
 
 private:
 	void RestoreShelves();
+	void SpawnEmployee();
+	void PayWages();
+	void ExpireContracts();
 	void ApplyUpgrade(FName Id);
 	void CheckAchievements();
 	void Unlock(const TCHAR* Id);
@@ -146,6 +186,11 @@ private:
 
 	/** Shelf contents read from the save; kept until they are put on the shelves (and re-saved untouched until then). */
 	UPROPERTY() TArray<FTSSShelfSave> LoadedShelfStock;
+	UPROPERTY() TArray<FTSSOrderLine> Storage;
+	UPROPERTY() TArray<FTSSActiveContract> Contracts;
+	bool bCashierHired = false;
+	float RestockTimer = 0.f;
+	TWeakObjectPtr<AActor> Employee;
 	bool bShelvesRestored = false;
 	bool bSaveDirty = false;
 	float DirtyTimer = 0.f;

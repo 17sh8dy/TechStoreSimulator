@@ -1,5 +1,7 @@
 #include "TSSBusinessSubsystem.h"
 #include "TSSDeliveryActors.h"
+#include "TSSEmployee.h"
+#include "TSSRegister.h"
 #include "TSSBusinessSave.h"
 #include "TSSInteractable.h"
 #include "TSSShelf.h"
@@ -47,11 +49,11 @@ const TArray<FTSSUpgradeDef>& UTSSBusinessSubsystem::UpgradeCatalog()
 		{ TEXT("shelf_5"), TEXT("Shelf Unit: far right wall"), TEXT("12 more slots at the back of the right wall."), 450, 3, 2, true },
 		{ TEXT("shelf_6"), TEXT("Shelf Unit: rear left"), TEXT("The last spot on the left wall."), 550, 4, 2, true },
 		{ TEXT("shelf_7"), TEXT("Shelf Unit: rear right"), TEXT("The last spot on the right wall."), 550, 4, 2, true },
-		{ TEXT("storage"), TEXT("Back-Room Storage"), TEXT("Stock held in the back room for the shelves."), 1500, 3, 1, false },
-		{ TEXT("equipment"), TEXT("Improved Computer"), TEXT("A faster machine and a newer StoreDesk."), 2000, 3, 0, false },
-		{ TEXT("dept_gaming"), TEXT("Gaming Department"), TEXT("A dedicated area for consoles and accessories."), 3000, 4, 2, false },
-		{ TEXT("employee"), TEXT("Hire a Cashier"), TEXT("An employee to run the register."), 2500, 4, 1, false },
-		{ TEXT("supplier_premium"), TEXT("Premium Supplier Access"), TEXT("Unlock higher-end products."), 4000, 6, 2, false },
+		{ TEXT("storage"), TEXT("Back-Room Storage"), TEXT("A back room for up to 200 units. Send a parcel there with the mouse wheel and shelves are topped up from it automatically."), 1500, 3, 1, true },
+		{ TEXT("equipment"), TEXT("Improved Computer"), TEXT("A faster machine: orders arrive 25% sooner and one order can hold up to 100 of each product."), 2000, 3, 0, true },
+		{ TEXT("dept_gaming"), TEXT("Gaming Department"), TEXT("Unlocks the gaming range in the wholesale catalogue: controllers, headsets and racing wheels."), 3000, 4, 2, true },
+		{ TEXT("employee"), TEXT("Hire a Cashier"), TEXT("Lets you hire staff from the Employees page. Your first hire is a cashier who runs the register."), 2500, 4, 1, true },
+		{ TEXT("supplier_premium"), TEXT("Premium Supplier Access"), TEXT("Unlocks higher-end products: gaming laptops, VR headsets and cameras."), 4000, 6, 2, true },
 	};
 	return Defs;
 }
@@ -65,6 +67,17 @@ const TArray<FTSSAchievementDef>& UTSSBusinessSubsystem::AchievementCatalog()
 		{ TEXT("big_sale"), TEXT("Big Spender"), TEXT("Ring up a single sale of $1,000 or more.") },
 		{ TEXT("first_delivery"), TEXT("Special Delivery"), TEXT("Receive and unpack a wholesale order.") },
 		{ TEXT("level_3"), TEXT("Growing Business"), TEXT("Reach business level 3.") },
+	};
+	return Defs;
+}
+
+const TArray<FTSSContractDef>& UTSSBusinessSubsystem::ContractCatalog()
+{
+	// Id, name, description, cost, days, min level.
+	static const TArray<FTSSContractDef> Defs = {
+		{ TEXT("promo"), TEXT("Street Promotion"), TEXT("Flyers and a sign on the pavement: twice as many customers walk in."), 350, 3, 5 },
+		{ TEXT("bulk_deal"), TEXT("Bulk Wholesale Deal"), TEXT("A volume agreement with your supplier: every wholesale order costs 15% less."), 500, 3, 5 },
+		{ TEXT("corporate"), TEXT("Corporate Accounts"), TEXT("Office buyers who are not shopping on price: customers accept shelf prices 25% higher."), 650, 3, 6 },
 	};
 	return Defs;
 }
@@ -114,6 +127,9 @@ void UTSSBusinessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		Achievements = Save->Achievements;
 		MovedObjects = Save->MovedObjects;
 		LoadedShelfStock = Save->ShelfStock;
+		Storage = Save->Storage;
+		bCashierHired = Save->bCashierHired;
+		Contracts = Save->Contracts;
 		// Parcels are not saved: an order that had already arrived is simply re-delivered.
 		for (FTSSOrder& O : Orders)
 		{
@@ -149,6 +165,7 @@ void UTSSBusinessSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	Super::OnWorldBeginPlay(InWorld);
 	for (const FName& U : Upgrades) ApplyUpgrade(U);
 	RestoreShelves();
+	if (bCashierHired) SpawnEmployee();
 	// The shell has finished sliding walls and wall-anchored furniture by now; then put the owner's own layout back.
 	InWorld.GetTimerManager().SetTimer(LayoutTimer, FTimerDelegate::CreateUObject(this, &UTSSBusinessSubsystem::ApplyLayout), 0.5f, false);
 }
@@ -246,6 +263,9 @@ void UTSSBusinessSubsystem::SaveNow()
 	Save->Upgrades = Upgrades;
 	Save->Achievements = Achievements;
 	Save->MovedObjects = MovedObjects;
+	Save->Storage = Storage;
+	Save->bCashierHired = bCashierHired;
+	Save->Contracts = Contracts;
 	if (!bShelvesRestored)
 	{
 		Save->ShelfStock = LoadedShelfStock;   // the shelves are not back yet: do not overwrite the saved stock with empty ones
@@ -315,19 +335,41 @@ void UTSSBusinessSubsystem::CheckAchievements()
 	}
 }
 
+bool UTSSBusinessSubsystem::IsProductAvailable(ETSSProduct Product, FString* Why) const
+{
+	const FTSSProductDef& Def = TSSProductDef(Product);
+	if (Def.MinLevel > GetLevel())
+	{
+		if (Why) *Why = FString::Printf(TEXT("%s is not available yet: reach business level %d."), Def.Name, Def.MinLevel);
+		return false;
+	}
+	if (Def.RequiresUpgrade[0] != 0 && !HasUpgrade(Def.RequiresUpgrade))
+	{
+		if (Why)
+		{
+			FString UpgradeName = Def.RequiresUpgrade;
+			for (const FTSSUpgradeDef& U : UpgradeCatalog()) if (FName(U.Id) == FName(Def.RequiresUpgrade)) UpgradeName = U.Name;
+			*Why = FString::Printf(TEXT("%s needs the upgrade \"%s\"."), Def.Name, *UpgradeName);
+		}
+		return false;
+	}
+	return true;
+}
+
 // ---- orders ---------------------------------------------------------------------------------------
 
 int32 UTSSBusinessSubsystem::OrderCost(const TArray<FTSSOrderLine>& Lines) const
 {
 	int32 Cost = 0;
 	for (const FTSSOrderLine& L : Lines) Cost += TSSProductDef(L.Product).WholesaleCost * L.Qty;
-	return Cost;
+	return FMath::RoundToInt(Cost * WholesaleMultiplier());
 }
 
 float UTSSBusinessSubsystem::EtaFor(int32 Units) const
 {
 	float Eta = FMath::Min(40.f + 6.f * Units, 120.f);
 	if (HasUpgrade(TEXT("supplier_fast"))) Eta *= 0.5f;
+	if (HasUpgrade(TEXT("equipment"))) Eta *= 0.75f;
 	return Eta * EtaScale;
 }
 
@@ -354,12 +396,8 @@ bool UTSSBusinessSubsystem::PlaceOrder(const TArray<FTSSOrderLine>& InLines, FSt
 	if (Order.Lines.Num() == 0) { Why = TEXT("Your cart is empty."); return false; }
 	for (const FTSSOrderLine& L : Order.Lines)
 	{
-		const FTSSProductDef& Def = TSSProductDef(L.Product);
-		if (Def.MinLevel > GetLevel())
-		{
-			Why = FString::Printf(TEXT("%s is not available yet: reach business level %d."), Def.Name, Def.MinLevel);
-			return false;
-		}
+		if (!IsProductAvailable(L.Product, &Why)) return false;
+		if (L.Qty > MaxCartQty()) { Why = FString::Printf(TEXT("One order can hold at most %d of each product."), MaxCartQty()); return false; }
 	}
 	if (!Store.IsValid()) { Why = TEXT("No store."); return false; }
 
@@ -474,6 +512,165 @@ void UTSSBusinessSubsystem::ApplyUpgrade(FName Id)
 	// store_1 / store_2 are applied by the StoreShell (it watches GetStoreStage()); supplier_fast is read by EtaFor().
 }
 
+// ---- back room ------------------------------------------------------------------------------------
+
+int32 UTSSBusinessSubsystem::GetStored(ETSSProduct Product) const
+{
+	const FTSSOrderLine* L = Storage.FindByPredicate([Product](const FTSSOrderLine& X) { return X.Product == Product; });
+	return L ? L->Qty : 0;
+}
+
+int32 UTSSBusinessSubsystem::GetStoredTotal() const
+{
+	int32 N = 0;
+	for (const FTSSOrderLine& L : Storage) N += L.Qty;
+	return N;
+}
+
+bool UTSSBusinessSubsystem::StoreInBackRoom(ETSSProduct Product, int32 Qty)
+{
+	if (!HasUpgrade(TEXT("storage")) || Product == ETSSProduct::None || Qty <= 0) return false;
+	if (GetStoredTotal() + Qty > StorageCapacity) return false;
+	FTSSOrderLine* L = Storage.FindByPredicate([Product](const FTSSOrderLine& X) { return X.Product == Product; });
+	if (!L) { L = &Storage.AddDefaulted_GetRef(); L->Product = Product; }
+	L->Qty += Qty;
+	bSaveDirty = true;
+	OnChanged.Broadcast();
+	return true;
+}
+
+int32 UTSSBusinessSubsystem::RestockShelvesFromStorage(int32 MaxUnits)
+{
+	int32 Moved = 0;
+	if (!HasUpgrade(TEXT("storage")) || GetStoredTotal() == 0) return 0;
+	for (TActorIterator<ATSSShelf> It(GetWorld()); It && Moved < MaxUnits; ++It)
+	{
+		for (int32 s = 0; s < ATSSShelf::Tiers * ATSSShelf::Columns && Moved < MaxUnits; ++s)
+		{
+			const ETSSProduct Wants = It->GetSlotWanted(s);
+			if (Wants == ETSSProduct::None || GetStored(Wants) <= 0) continue;
+			if (!It->PutBack(s, Wants)) continue;   // full, or holds something else
+			FTSSOrderLine* L = Storage.FindByPredicate([Wants](const FTSSOrderLine& X) { return X.Product == Wants; });
+			if (L && --L->Qty <= 0) Storage.RemoveAll([Wants](const FTSSOrderLine& X) { return X.Product == Wants; });
+			++Moved;
+		}
+	}
+	if (Moved > 0) OnChanged.Broadcast();
+	return Moved;
+}
+
+// ---- staff ----------------------------------------------------------------------------------------
+
+bool UTSSBusinessSubsystem::CanHireCashier(FString& Why) const
+{
+	if (!HasUpgrade(TEXT("employee"))) { Why = TEXT("Buy the \"Hire a Cashier\" upgrade in Store Management first."); return false; }
+	if (bCashierHired) { Why = TEXT("You already have a cashier."); return false; }
+	if (!Store.IsValid() || Store->GetMoney() < CashierHireFee) { Why = FString::Printf(TEXT("Hiring costs $%d."), CashierHireFee); return false; }
+	return true;
+}
+
+bool UTSSBusinessSubsystem::HireCashier(FString& Why)
+{
+	if (!CanHireCashier(Why)) return false;
+	if (!Store->TrySpend(CashierHireFee)) { Why = TEXT("Not enough money."); return false; }
+	Store->NoteWageSpend(CashierHireFee);
+	bCashierHired = true;
+	SpawnEmployee();
+	AddXP(30);
+	SaveNow();
+	Why = FString::Printf(TEXT("You hired a cashier. Wage: $%d per day."), CashierWage);
+	return true;
+}
+
+void UTSSBusinessSubsystem::DismissCashier()
+{
+	bCashierHired = false;
+	if (Employee.IsValid()) Employee->Destroy();
+	Employee.Reset();
+	SaveNow();
+	OnChanged.Broadcast();
+}
+
+void UTSSBusinessSubsystem::SetCashierForTest(bool bOn)
+{
+	if (bOn) { bCashierHired = true; SpawnEmployee(); }
+	else DismissCashier();
+}
+
+void UTSSBusinessSubsystem::SpawnEmployee()
+{
+	if (Employee.IsValid()) return;
+	ATSSRegister* Reg = nullptr;
+	for (TActorIterator<ATSSRegister> It(GetWorld()); It; ++It) { Reg = *It; break; }
+	if (!Reg) return;
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	const FVector At = Reg->GetActorTransform().TransformPosition(ATSSEmployee::StandOffset());
+	Employee = GetWorld()->SpawnActor<ATSSEmployee>(ATSSEmployee::StaticClass(), FTransform(FRotator(0.f, Reg->GetActorRotation().Yaw + 180.f, 0.f), At), Params);
+}
+
+void UTSSBusinessSubsystem::PayWages()
+{
+	if (!bCashierHired || !Store.IsValid()) return;
+	if (Store->TrySpend(CashierWage))
+	{
+		Store->NoteWageSpend(CashierWage);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Display, TEXT("TSS the cashier quit: wages could not be paid"));
+		DismissCashier();
+	}
+}
+
+// ---- contracts ------------------------------------------------------------------------------------
+
+bool UTSSBusinessSubsystem::IsContractActive(FName Id) const
+{
+	return Contracts.ContainsByPredicate([Id](const FTSSActiveContract& C) { return C.Id == Id; });
+}
+
+int32 UTSSBusinessSubsystem::ContractDaysLeft(FName Id) const
+{
+	const FTSSActiveContract* C = Contracts.FindByPredicate([Id](const FTSSActiveContract& X) { return X.Id == Id; });
+	return (C && Store.IsValid()) ? FMath::Max(0, C->EndDay - Store->GetDay() + 1) : 0;
+}
+
+bool UTSSBusinessSubsystem::CanSignContract(const FTSSContractDef& Def, FString& Why) const
+{
+	if (IsContractActive(Def.Id)) { Why = TEXT("Already running."); return false; }
+	if (GetLevel() < Def.MinLevel) { Why = FString::Printf(TEXT("Requires business level %d."), Def.MinLevel); return false; }
+	if (!Store.IsValid() || Store->GetMoney() < Def.Cost) { Why = FString::Printf(TEXT("Costs $%d."), Def.Cost); return false; }
+	return true;
+}
+
+bool UTSSBusinessSubsystem::SignContract(FName Id, FString& Why)
+{
+	for (const FTSSContractDef& Def : ContractCatalog())
+	{
+		if (Id != FName(Def.Id)) continue;
+		if (!CanSignContract(Def, Why)) return false;
+		if (!Store->TrySpend(Def.Cost)) { Why = TEXT("Not enough money."); return false; }
+		Store->NoteContractSpend(Def.Cost);
+		FTSSActiveContract& C = Contracts.AddDefaulted_GetRef();
+		C.Id = Id;
+		C.EndDay = Store->GetDay() + Def.Days - 1;
+		AddXP(40);
+		SaveNow();
+		Why = FString::Printf(TEXT("Signed: %s (%d days)."), Def.Name, Def.Days);
+		return true;
+	}
+	Why = TEXT("Unknown contract.");
+	return false;
+}
+
+void UTSSBusinessSubsystem::ExpireContracts()
+{
+	if (!Store.IsValid()) return;
+	const int32 Today = Store->GetDay();
+	Contracts.RemoveAll([Today](const FTSSActiveContract& C) { return C.EndDay < Today; });
+}
+
 // ---- clock ----------------------------------------------------------------------------------------
 
 FString UTSSBusinessSubsystem::FormatClock(float Hour)
@@ -501,7 +698,19 @@ void UTSSBusinessSubsystem::Tick(float DeltaTime)
 
 	SimSeconds += DeltaTime;
 	const int32 NewDay = DayForSeconds(SimSeconds);
-	if (NewDay > Store->GetDay()) Store->StartDay(NewDay);
+	if (NewDay > Store->GetDay())
+	{
+		Store->StartDay(NewDay);
+		ExpireContracts();
+		PayWages();
+	}
+
+	RestockTimer += DeltaTime;
+	if (RestockTimer > 4.f)
+	{
+		RestockTimer = 0.f;
+		RestockShelvesFromStorage(2);
+	}
 
 	if (!bTruckActive)
 	{
