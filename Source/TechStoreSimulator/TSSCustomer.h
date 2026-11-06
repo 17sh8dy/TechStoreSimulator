@@ -5,6 +5,7 @@
 #include "TSSProducts.h"
 #include "TSSShelf.h"
 #include "TSSCheckoutTypes.h"
+#include "TSSBankCard.h"
 #include "TSSHumanAnimInstance.h"
 #include "TSSCustomer.generated.h"
 
@@ -64,6 +65,9 @@ public:
 	bool WasBagSeen() const { return bBagSeen; }
 	bool WasStrayPanelSeen() const { return bStrayPanelSeen; }
 	const TArray<FTSSBasketItem>& GetBasket() const { return Basket; }
+	/** Tests: is the debit card showing in the customer's hand, and where is it? */
+	bool IsCardShown() const;
+	FVector GetCardLocation() const;
 	/** True while a scripted gesture sequence is running. */
 	bool IsBusyGesturing() const { return Script.Num() > 0; }
 	/** Tests: make this customer always pay this way (None = random). */
@@ -87,7 +91,7 @@ private:
 	FStep Do(TFunction<void()> Action) const;
 	FStep Wait(float Seconds) const;
 	FStep ReachTo(ETSSHand Hand, TFunction<FVector()> Target) const;
-	FStep WaitFor(TFunction<bool()> Condition) const;
+	FStep WaitFor(TFunction<bool()> Condition, float MaxSeconds = 20.f) const;
 	void SetScript(FScript NewScript);
 	void ReplaceRestOfScript(FScript NewSteps);
 	void ClearScript();
@@ -107,6 +111,7 @@ private:
 	void BeginPaymentGestures();
 	void ShowHeld(UTSSProductBoxComponent* Mesh, bool bShow);
 	void FollowRightHand(UTSSProductBoxComponent* Mesh, float DepthCm);
+	void FollowCardInHand();
 
 	// where the hands go
 	FVector ChestPoint(ETSSHand Hand) const;
@@ -121,8 +126,10 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCapsuleComponent> Capsule;
 	UPROPERTY() TObjectPtr<UTSSHumanComponent> Human;
 	UPROPERTY() TObjectPtr<UTSSProductBoxComponent> CarriedMesh;   // the box (or bag) in the right hand
-	UPROPERTY() TObjectPtr<UTSSProductBoxComponent> HandProp;      // a card or banknotes
-	UPROPERTY() TObjectPtr<UTextRenderComponent> Bubble;
+	UPROPERTY() TObjectPtr<UTSSProductBoxComponent> HandProp;      // banknotes
+	UPROPERTY() TObjectPtr<UTSSCardVisual> CardProp;               // their debit card
+	FTSSBankCard PayCard;
+UPROPERTY() TObjectPtr<UTextRenderComponent> Bubble;
 
 	UPROPERTY() TObjectPtr<ATSSRegister> Register;
 	ETSSCustomerState State = ETSSCustomerState::Entering;

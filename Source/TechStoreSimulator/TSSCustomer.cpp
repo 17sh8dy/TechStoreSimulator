@@ -45,6 +45,10 @@ ATSSCustomer::ATSSCustomer()
 	HandProp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HandProp->SetVisibility(false, true);
 
+	CardProp = CreateDefaultSubobject<UTSSCardVisual>(TEXT("CardProp"));
+	CardProp->SetupAttachment(Capsule);
+	CardProp->SetVisibility(false, true);
+
 	Bubble = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Bubble"));
 	Bubble->SetupAttachment(Capsule);
 	Bubble->SetRelativeLocation(FVector(0.f, 0.f, 125.f));
@@ -106,10 +110,10 @@ ATSSCustomer::FStep ATSSCustomer::ReachTo(ETSSHand Hand, TFunction<FVector()> Ta
 	return S;
 }
 
-ATSSCustomer::FStep ATSSCustomer::WaitFor(TFunction<bool()> Condition) const
+ATSSCustomer::FStep ATSSCustomer::WaitFor(TFunction<bool()> Condition, float MaxSeconds) const
 {
 	FStep S;
-	S.Until = [this, Condition](float) { return Condition() || StepTime > 20.f; };
+S.Until = [this, Condition, MaxSeconds](float) { return Condition() || StepTime > MaxSeconds; };
 	return S;
 }
 
@@ -211,6 +215,21 @@ FVector ATSSCustomer::HipPoint() const
 void ATSSCustomer::ShowHeld(UTSSProductBoxComponent* Mesh, bool bShow)
 {
 	Mesh->SetVisibility(bShow, true);
+}
+
+bool ATSSCustomer::IsCardShown() const { return CardProp && CardProp->IsVisible(); }
+FVector ATSSCustomer::GetCardLocation() const { return CardProp ? CardProp->GetComponentLocation() : FVector::ZeroVector; }
+
+void ATSSCustomer::FollowCardInHand()
+{
+	if (!CardProp->IsVisible() || !Register) return;
+	// The card is held flat, face up, in the register's frame so the shop owner can read it. Once the customer has put it to the
+	// terminal it stays there (an arm only reaches so far across a counter), until the payment is done.
+	const ETSSCheckoutPhase P = Register->GetPhase();
+	const bool bAtTerminal = P == ETSSCheckoutPhase::CardTap || P == ETSSCheckoutPhase::CardPin || P == ETSSCheckoutPhase::CardReady
+		|| P == ETSSCheckoutPhase::CardProcessing || P == ETSSCheckoutPhase::CardResult;
+	const FVector At = bAtTerminal ? Register->TerminalTapPoint() : Human->GetHandWorldLocation(RHand) + FVector(0.f, 0.f, 1.5f);
+	CardProp->SetWorldLocationAndRotation(At, Register->GetActorRotation());
 }
 
 void ATSSCustomer::FollowRightHand(UTSSProductBoxComponent* Mesh, float DepthCm)
@@ -362,6 +381,7 @@ void ATSSCustomer::WalkOut(const FString& Reason, bool bUnhappy)
 	Basket.Reset();
 	ShowHeld(CarriedMesh, false);
 	ShowHeld(HandProp, false);
+	CardProp->SetShown(false);
 	bCarrying = false;
 	if (bUnhappy)
 	{
@@ -426,17 +446,23 @@ void ATSSCustomer::BeginPaymentGestures()
 	{
 		S.Add(Do([this]() { Say(TEXT("Card, please."), 3.f); }));
 		S.Add(ReachTo(RHand, [this]() { return HipPoint(); }));
-		S.Add(Do([this]() { HandProp->SetPlain(FVector(8.5f, 5.4f, 0.4f), FLinearColor(0.08f, 0.25f, 0.8f)); ShowHeld(HandProp, true); }));
+S.Add(Do([this]()
+		{
+			// Their debit card: bank, number, expiry, name and a PIN, all invented. One in a few dozen has run out.
+			PayCard = TSSCards::Generate(Register->Today(), FMath::FRand() < Register->ExpiredCardChance);
+			CardProp->SetCard(PayCard);
+			CardProp->SetShown(true);
+		}));
 		S.Add(Wait(0.2f));
 		S.Add(ReachTo(RHand, [this]() { return Register->TerminalTapPoint(); }));
-		S.Add(Do([this]() { Register->CustomerTapsCard(); }));
+S.Add(Do([this]() { Register->CustomerPresentsCard(PayCard); }));
 		// Hold the card to the terminal until the payment has gone through (or been declined).
 		S.Add(WaitFor([this]()
 		{
 			const ETSSCheckoutPhase P = Register->GetPhase();
-			return !(P == ETSSCheckoutPhase::CardTap || P == ETSSCheckoutPhase::CardReady || P == ETSSCheckoutPhase::CardProcessing || P == ETSSCheckoutPhase::CardResult);
-		}));
-		S.Add(Do([this]() { ShowHeld(HandProp, false); Human->Relax(RHand, BlendSeconds()); }));
+			return !(P == ETSSCheckoutPhase::CardTap || P == ETSSCheckoutPhase::CardPin || P == ETSSCheckoutPhase::CardReady ||P == ETSSCheckoutPhase::CardProcessing || P == ETSSCheckoutPhase::CardResult);
+			}, 240.f));   // a busy owner can take a while to press the terminal
+S.Add(Do([this]() { CardProp->SetShown(false); Human->Relax(RHand, BlendSeconds()); }));
 	}
 	else
 	{
@@ -611,4 +637,5 @@ void ATSSCustomer::Tick(float Dt)
 	}
 	FollowRightHand(CarriedMesh, CarriedDepth);
 	FollowRightHand(HandProp, 8.f);
+	FollowCardInHand();
 }

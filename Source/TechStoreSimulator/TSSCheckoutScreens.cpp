@@ -1,6 +1,7 @@
 #include "TSSCheckoutScreens.h"
 #include "TSSRegister.h"
 #include "TSSProducts.h"
+#include "TSSBankCard.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -163,6 +164,15 @@ FText UTSSTerminalWidget::AmountText() const
 return FText::FromString(bShow ? TSSMoney::Format(Reg->GetTotal()) : FString(TEXT("$0.00")));
 }
 
+FText UTSSTerminalWidget::CardText() const
+{
+	if (!Reg.IsValid() || !Reg->HasCard()) return FText::GetEmpty();
+	const FTSSBankCard& C = Reg->GetCard();
+	FString Out = FString::Printf(TEXT("%s DEBIT\n%s\nEXP %s"), *C.Network, *C.Masked(), *C.Expiry());
+	if (Reg->GetPhase() == ETSSCheckoutPhase::CardPin) Out += FString::Printf(TEXT("\n\nPIN  %s"), *TSSCards::PinDots(Reg->GetPinTyped()));
+	return FText::FromString(Out);
+}
+
 FText UTSSTerminalWidget::StatusText() const
 {
 	return FText::FromString(Reg.IsValid() ? Reg->TerminalStatus() : FString(TEXT("STANDBY")));
@@ -185,10 +195,15 @@ TSharedRef<SWidget> UTSSTerminalWidget::RebuildWidget()
 			[
 				SNew(STextBlock).Text(FText::FromString(TEXT("TECH PAY"))).Font(ScrFont(TEXT("Bold"), 20)).ColorAndOpacity(ScrAccent)
 			]
-			+ SVerticalBox::Slot().FillHeight(1.f).HAlign(HAlign_Center).VAlign(VAlign_Center)
-			[
-				SNew(STextBlock).Text_UObject(this, &UTSSTerminalWidget::AmountText).Font(ScrFont(TEXT("Bold"), 52))
-			]
+				+ SVerticalBox::Slot().FillHeight(1.f).HAlign(HAlign_Center).VAlign(VAlign_Center)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ SNew(STextBlock).Text_UObject(this, &UTSSTerminalWidget::AmountText).Font(ScrFont(TEXT("Bold"), 34)) ]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 6.f, 0.f, 0.f)
+					[
+						SNew(STextBlock).Text_UObject(this, &UTSSTerminalWidget::CardText).Font(ScrFont(TEXT("Regular"), 14)).ColorAndOpacity(ScrMuted).Justification(ETextJustify::Center)
+					]
+				]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SBorder)

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "TSSInteractable.h"
 #include "TSSCheckoutTypes.h"
+#include "TSSBankCard.h"
 #include "TSSRegister.generated.h"
 
 class ATSSCustomer;
@@ -56,15 +57,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Customers") FVector SpawnPoint = FVector(1500.f, 0.f, 0.f);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Customers") FVector DoorPoint = FVector(760.f, 0.f, 0.f);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Customers") FVector HubPoint = FVector(350.f, 0.f, 0.f);
-	/** Chance a card payment is declined (the customer then pays cash). */
+	/** Chance a card payment is declined for insufficient funds (the customer then pays cash). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Checkout") float CardDeclineChance = 0.1f;
+	/** Chance a customer's card has expired, and of a mistyped PIN on a chip-and-PIN sale. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Checkout") float ExpiredCardChance = 0.03f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Checkout") float WrongPinChance = 0.07f;
+	/** Purchases up to this many cents are paid by holding the card to the terminal; above it, chip and PIN. */
+	static constexpr int32 ContactlessLimit = 10000;
 
 	// ---- the customer starts / drives a sale ------------------------------------------------------
 	/** The customer at the front of the line puts their basket on the counter. */
 	void BeginTransaction(ATSSCustomer* Customer, const TArray<FTSSBasketItem>& Basket);
 	/** The customer hands over cash: notes and coins (TSSMoney table indices). */
 	void CustomerPaysCash(const TArray<int32>& Pieces);
-	void CustomerTapsCard();
+	/** The customer holds their card to the terminal: tapped (small sales) or inserted with a PIN (bigger ones). */
+	void CustomerPresentsCard(const FTSSBankCard& Card);
 
 	// ---- owner actions (called by the devices) ----------------------------------------------------
 	bool ScanItem(ATSSProductItem* Item, FString& Why);
@@ -102,6 +109,15 @@ public:
 	FString TerminalStatus() const;
 	FLinearColor TerminalColor() const;
 	bool WasCardApproved() const { return bCardApproved; }
+	bool HasCard() const { return CurrentCard.IsValid(); }
+	const FTSSBankCard& GetCard() const { return CurrentCard; }
+	bool IsContactlessSale() const { return Total <= ContactlessLimit; }
+	int32 GetPinTyped() const { return PinTyped; }
+	bool IsPinWrong() const { return bPinWrong; }
+	const FString& GetDeclineReason() const { return DeclineReason; }
+	const FString& GetAuthCode() const { return AuthCode; }
+	/** The calendar date in the shop today (cards are checked against it). */
+	FDateTime Today() const;
 
 	ATSSScanner* GetScanner() const;
 	ATSSCashDrawer* GetDrawer() const;
@@ -166,7 +182,13 @@ int32 Subtotal = 0, Tax = 0, Total = 0;
 	int32 ScannedCount = 0;
 	int32 ItemsPlaced = 0;
 	bool bCardApproved = false;
-	float PhaseTimer = 0.f;
+	FTSSBankCard CurrentCard;
+	int32 PinTyped = 0;
+	int32 PinAttempts = 0;
+	bool bPinWrong = false;
+	FString DeclineReason;
+	FString AuthCode;
+float PhaseTimer = 0.f;
 	FString Notice;
 	float NoticeTimer = 0.f;
 	ETSSCheckoutPhase CashierSeenPhase = ETSSCheckoutPhase::Idle;

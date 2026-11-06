@@ -44,6 +44,7 @@ protected:
 
 private:
 	FText AmountText() const;
+	FText CardText() const;
 	FText StatusText() const;
 	FSlateColor StatusColor() const;
 

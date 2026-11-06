@@ -15,7 +15,8 @@ enum class ETSSCheckoutPhase : uint8
 	Scanning,           // items are on the counter: pick up, scan, then charge
 	WaitingForPayment,  // customer is deciding how to pay
 	CashDue,            // cash is on the counter: give change, then confirm
-	CardTap,            // customer is tapping their card
+	CardTap,            // customer is tapping (or inserting) their card
+	CardPin,            // chip card inserted: the customer is typing their PIN
 	CardReady,          // terminal wants the owner to process it
 	CardProcessing,
 	CardResult,         // approved / declined on the terminal screen

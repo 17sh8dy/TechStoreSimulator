@@ -557,6 +557,30 @@ void ATSSPlayerController::TSSSelfTest()
 	}
 Check(TEXT("sprinting is clearly faster than walking"), ATSSCharacter::SpeedFor(true) >= ATSSCharacter::SpeedFor(false) * 1.8f);
 
+	// ---- debit cards ----
+	{
+		bool bOk = true, bExpiredOk = true, bFreshOk = true;
+		const FDateTime Today(2026, 11, 20);
+		TSet<FString> Seen;
+		for (int32 i = 0; i < 400; ++i)
+		{
+			const FTSSBankCard C = TSSCards::Generate(Today, false);
+			const FTSSBankCard X = TSSCards::Generate(Today, true);
+			if (C.Number.Len() != 16 || !C.Number.StartsWith(TEXT("9")) || !TSSCards::LuhnValid(C.Number) || C.Pin.Len() != 4 || C.Cvv.Len() != 3) bOk = false;
+			if (C.ExpMonth < 1 || C.ExpMonth > 12 || C.IsExpiredOn(Today)) bFreshOk = false;
+			if (!X.IsExpiredOn(Today) || !TSSCards::LuhnValid(X.Number)) bExpiredOk = false;
+			Seen.Add(C.Number);
+		}
+		Check(TEXT("generated cards have 16 digits, start with 9, and pass the Luhn check"), bOk);
+		Check(TEXT("card numbers are random (no repeats in 400)"), Seen.Num() == 400);
+		Check(TEXT("fresh cards are in date and expired cards are really expired"), bFreshOk && bExpiredOk);
+		FTSSBankCard Fixed;
+		Fixed.ExpMonth = 11; Fixed.ExpYear = 2026;
+		Check(TEXT("a card is good through the last day of its expiry month"), !Fixed.IsExpiredOn(FDateTime(2026, 11, 30)) && Fixed.IsExpiredOn(FDateTime(2026, 12, 1)));
+		Check(TEXT("a number that fails the Luhn check is rejected"), TSSCards::LuhnValid(TEXT("4539578763621486")) && !TSSCards::LuhnValid(TEXT("4539578763621487")));
+		Check(TEXT("card formatting: spaced, masked, expiry and PIN dots"), [&]() { FTSSBankCard K; K.Number = TEXT("9412345678901234"); K.ExpMonth = 8; K.ExpYear = 2028; return K.Spaced() == TEXT("9412 3456 7890 1234") && K.Masked() == TEXT("**** **** **** 1234") && K.Expiry() == TEXT("08/28") && TSSCards::PinDots(2) == TEXT("* * _ _"); }());
+	}
+
 	// ---- US money ----
 	Check(TEXT("money is formatted with cents and thousands separators"), TSSMoney::Format(123456) == TEXT("$1,234.56") && TSSMoney::Format(5) == TEXT("$0.05") && TSSMoney::Format(-150) == TEXT("-$1.50"));
 	Check(TEXT("whole-dollar amounts print short"), TSSMoney::FormatShort(2000) == TEXT("$20") && TSSMoney::FormatShort(2050) == TEXT("$20.50"));
@@ -664,7 +688,9 @@ TMap<ETSSProduct, int32> OldPrices;
 	// second basket on the counter during our runs. Start from an empty shop and a free register.
 	for (TActorIterator<ATSSCustomer> CIt(GetWorld()); CIt; ++CIt) CIt->Destroy();
 	Reg->ReleaseSale();
-	Reg->CardDeclineChance = 0.f; // deterministic; the decline path has its own check below
+Reg->CardDeclineChance = 0.f; // deterministic; the decline path has its own check below
+		Reg->ExpiredCardChance = 0.f;
+		Reg->WrongPinChance = 0.f;
 	if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>()) Cfg->SetViewMode(ETSSViewMode::FirstPerson, false);
 
 	auto Spawn = [this, St, CS, Store](ETSSPayMethod Method)
@@ -781,8 +807,16 @@ Check(TEXT("the notes and coins are on the counter"), Reg->GetTender().Num() > 0
 				else
 				{
 					if (Reg->GetPhase() != ETSSCheckoutPhase::CardReady) { if (bTimeout) Fail(TEXT("customer tapped a card and the terminal is ready")); return; }
-					Check(TEXT("customer chose card"), Reg->GetMethod() == ETSSPayMethod::Card);
-					Snap(FVector(100.f, 55.f, 0.f), FVector(2.f, 55.f, 118.f));
+Check(TEXT("customer chose card"), Reg->GetMethod() == ETSSPayMethod::Card);
+						Check(TEXT("the customer's card is a real-looking invented card that passes the number check and is in date"),
+							Reg->HasCard() && TSSCards::LuhnValid(Reg->GetCard().Number) && Reg->GetCard().Number.Len() == 16 && !Reg->GetCard().IsExpiredOn(Reg->Today()) && Reg->GetCard().Pin.Len() == 4 && !Reg->GetCard().Holder.IsEmpty());
+if (St->Customer.IsValid())
+						{
+							UE_LOG(LogTemp, Display, TEXT("TSS card debug: shown=%d phase=%d state=%d busy=%d card=%s tap=%s"), St->Customer->IsCardShown(), static_cast<int32>(Reg->GetPhase()), static_cast<int32>(St->Customer->GetState()), St->Customer->IsBusyGesturing(), *St->Customer->GetCardLocation().ToString(), *Reg->TerminalTapPoint().ToString());
+							Check(TEXT("the customer holds their card out at the terminal, where the owner can see it"), St->Customer->IsCardShown() && FVector::Dist(St->Customer->GetCardLocation(), Reg->TerminalTapPoint()) < 25.f);
+						}
+						Check(TEXT("small sales are tapped and large ones use chip and PIN"), Reg->IsContactlessSale() == (Reg->GetTotal() <= ATSSRegister::ContactlessLimit));
+					Snap(FVector(46.f, 40.f, 0.f), FVector(3.f, 55.f, 126.f));
 					St->Hold = 1.4f;
 					St->Step = 3; St->Elapsed = 0.f;
 				}
@@ -807,7 +841,12 @@ Check(TEXT("the store's money went up by exactly the total, to the cent"), Store
 				Check(TEXT("sale recorded under the right payment method"),
 					bCash ?(Store->GetCashSalesCents() == St->Cash0 + St->ExpectedTotal && Store->GetCardSalesCents() == St->Card0)
 					      :(Store->GetCardSalesCents() == St->Card0 + St->ExpectedTotal && Store->GetCashSalesCents() == St->Cash0));
-				Check(TEXT("tax collected is recorded"),Store->GetTaxCollectedCents() == St->Tax0 + TSSMoney::TaxFor(St->ExpectedSub));
+if (!bCash && Store->GetTransactions().Num() > 0)
+					{
+						const FTSSTransaction& Last = Store->GetTransactions().Last();
+						Check(TEXT("a card sale records the network, last four digits and a six-digit authorisation code"), Last.CardLast4 == Reg->GetCard().Last4() && Last.CardNetwork == Reg->GetCard().Network && Last.AuthCode.Len() == 6);
+					}
+					Check(TEXT("tax collected is recorded"),Store->GetTaxCollectedCents() == St->Tax0 + TSSMoney::TaxFor(St->ExpectedSub));
 				Check(TEXT("the receipt printer has a receipt"), Reg->GetPrinter()->HasReceipt());
 				St->Hold = 2.0f; // let the receipt finish printing
 				St->Step = 5; St->Elapsed = 0.f;

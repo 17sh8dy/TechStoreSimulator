@@ -217,6 +217,8 @@ void ATSSRegister::Reset()
 {
 	ReleaseChange();
 	Tender.Reset();
+	CurrentCard = FTSSBankCard();
+	PinTyped = 0; PinAttempts = 0; bPinWrong = false;
 	for (ATSSProductItem* I : Items) if (I) I->Destroy();
 	Items.Reset();
 	Lines.Reset();
@@ -369,8 +371,20 @@ void ATSSRegister::ConfirmChange()
 
 // ---- card -----------------------------------------------------------------------------------------
 
-void ATSSRegister::CustomerTapsCard()
+FDateTime ATSSRegister::Today() const
 {
+	const UTSSStoreSubsystem* Store = GetWorld() ? GetWorld()->GetSubsystem<UTSSStoreSubsystem>() : nullptr;
+	return UTSSBusinessSubsystem::DateForDay(Store ? Store->GetDay() : 1);
+}
+
+void ATSSRegister::CustomerPresentsCard(const FTSSBankCard& Card)
+{
+	CurrentCard = Card;
+	PinTyped = 0;
+	PinAttempts = 0;
+	bPinWrong = false;
+	DeclineReason.Reset();
+	AuthCode.Reset();
 	Phase = ETSSCheckoutPhase::CardTap;
 	Method = ETSSPayMethod::Card;
 	PhaseTimer = 1.0f;
@@ -386,6 +400,7 @@ void ATSSRegister::ProcessCard()
 
 FString ATSSRegister::TerminalPrompt() const
 {
+	if (Phase == ETSSCheckoutPhase::CardPin) return TEXT("The customer is typing their PIN...");
 	if (Phase == ETSSCheckoutPhase::CardReady) return FString::Printf(TEXT("[E / Click] Process card payment  (%s)"), *TSSMoney::Format(Total));
 	return TEXT("Card terminal");
 }
@@ -394,11 +409,12 @@ FString ATSSRegister::TerminalStatus() const
 {
 	switch (Phase)
 	{
-	case ETSSCheckoutPhase::CardTap: return TEXT("TAP CARD");
-	case ETSSCheckoutPhase::CardReady: return TEXT("PRESS TO PAY");
+		case ETSSCheckoutPhase::CardTap: return IsContactlessSale() ? TEXT("CARD READ") : TEXT("CHIP READ");
+		case ETSSCheckoutPhase::CardPin: return bPinWrong ? TEXT("WRONG PIN") : TEXT("ENTER PIN");
+		case ETSSCheckoutPhase::CardReady: return TEXT("PRESS TO PAY");
 	case ETSSCheckoutPhase::CardProcessing:
 		return FString(TEXT("PROCESSING")) + FString::ChrN(1 + (static_cast<int32>(GetWorld()->GetTimeSeconds() * 3.f) % 3), TEXT('.'));
-	case ETSSCheckoutPhase::CardResult: return bCardApproved ? TEXT("APPROVED") : TEXT("DECLINED");
+	case ETSSCheckoutPhase::CardResult: return bCardApproved ? FString(TEXT("APPROVED")) : DeclineReason;
 	case ETSSCheckoutPhase::Receipt: return Method == ETSSPayMethod::Card ? TEXT("THANK YOU") : TEXT("STANDBY");
 	default: return TEXT("STANDBY");
 	}
@@ -408,7 +424,8 @@ FLinearColor ATSSRegister::TerminalColor() const
 {
 	switch (Phase)
 	{
-	case ETSSCheckoutPhase::CardTap: return FLinearColor(0.1f, 0.4f, 0.85f);
+		case ETSSCheckoutPhase::CardTap: return FLinearColor(0.1f, 0.4f, 0.85f);
+		case ETSSCheckoutPhase::CardPin: return bPinWrong ? FLinearColor(0.8f, 0.15f, 0.15f) : FLinearColor(0.1f, 0.4f, 0.85f);
 	case ETSSCheckoutPhase::CardReady: return FLinearColor(0.85f, 0.55f, 0.05f);
 	case ETSSCheckoutPhase::CardProcessing: return FLinearColor(0.2f, 0.3f, 0.5f);
 	case ETSSCheckoutPhase::CardResult: return bCardApproved ? FLinearColor(0.1f, 0.65f, 0.3f) : FLinearColor(0.8f, 0.15f, 0.15f);
@@ -428,6 +445,7 @@ void ATSSRegister::Complete(ETSSPayMethod PaidBy)
 	T.Method = PaidBy;
 	T.CashReceived = PaidBy == ETSSPayMethod::Cash ? CashReceived : 0;
 	T.Change = PaidBy == ETSSPayMethod::Cash ? ChangeDue : 0;
+	if (PaidBy == ETSSPayMethod::Card) { T.CardNetwork = CurrentCard.Network; T.CardLast4 = CurrentCard.Last4(); T.AuthCode = AuthCode; }
 	if (const UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) T.TimeMinutes = FMath::FloorToInt(Biz->GetHour() * 60.f);
 	if (UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>()) Store->RecordSale(T);
 
@@ -511,15 +529,43 @@ void ATSSRegister::Tick(float Dt)
 		PhaseTimer -= Dt;
 		if (PhaseTimer <= 0.f)
 		{
-			Phase = ETSSCheckoutPhase::CardReady;
-			SetNotice(TEXT("Card ready  -  process the payment on the terminal"), 5.f);
+			if (IsContactlessSale())
+			{
+				Phase = ETSSCheckoutPhase::CardReady;
+				SetNotice(TEXT("Card ready  -  process the payment on the terminal"), 5.f);
+			}
+			else
+			{
+				Phase = ETSSCheckoutPhase::CardPin;
+				PinTyped = 0;
+				PhaseTimer = 0.75f;
+				SetNotice(TEXT("Chip card  -  the customer is entering their PIN"), 5.f);
+			}
+		}
+		break;
+	case ETSSCheckoutPhase::CardPin:
+		PhaseTimer -= Dt;
+		if (PhaseTimer <= 0.f)
+		{
+			if (bPinWrong) { bPinWrong = false; PinTyped = 0; PhaseTimer = 0.75f; }   // the terminal cleared the wrong PIN: try again
+			else if (PinTyped < 4) { ++PinTyped; PhaseTimer = 0.75f; }
+			else if (PinAttempts == 0 && FMath::FRand() < WrongPinChance) { ++PinAttempts; bPinWrong = true; PhaseTimer = 1.4f; }
+			else
+			{
+				Phase = ETSSCheckoutPhase::CardReady;
+				SetNotice(TEXT("PIN accepted  -  process the payment on the terminal"), 5.f);
+			}
 		}
 		break;
 	case ETSSCheckoutPhase::CardProcessing:
 		PhaseTimer -= Dt;
 		if (PhaseTimer <= 0.f)
 		{
-			bCardApproved = FMath::FRand() >= CardDeclineChance;
+			// The bank checks the card: is it real, in date, and is there money behind it?
+			if (!TSSCards::LuhnValid(CurrentCard.Number)) { bCardApproved = false; DeclineReason = TEXT("INVALID CARD"); }
+			else if (CurrentCard.IsExpiredOn(Today())) { bCardApproved = false; DeclineReason = TEXT("CARD EXPIRED"); }
+			else if (FMath::FRand() < CardDeclineChance) { bCardApproved = false; DeclineReason = TEXT("INSUFFICIENT FUNDS"); }
+			else { bCardApproved = true; DeclineReason.Reset(); AuthCode = FString::Printf(TEXT("%06d"), FMath::RandRange(0, 999999)); }
 			Phase = ETSSCheckoutPhase::CardResult;
 			PhaseTimer = 1.4f;
 		}
@@ -538,8 +584,12 @@ void ATSSRegister::Tick(float Dt)
 				if (ATSSCardTerminal* T = GetTerminal()) T->SetCardPresent(false);
 				Phase = ETSSCheckoutPhase::WaitingForPayment;
 				Method = ETSSPayMethod::None;
-				SetNotice(TEXT("Card declined  -  customer will pay cash"), 4.f);
-				if (Customer) { Customer->Complain(TEXT("Declined?! Let me pay cash.")); Customer->PayNow(true); }
+SetNotice(FString::Printf(TEXT("Card declined (%s)  -  customer will pay cash"), *DeclineReason), 5.f);
+				if (Customer)
+				{
+					Customer->Complain(DeclineReason == TEXT("CARD EXPIRED") ? TEXT("Expired? Oh no. I'll pay cash.") : TEXT("Declined?! Let me pay cash."));
+					Customer->PayNow(true);
+				}
 			}
 		}
 		break;
