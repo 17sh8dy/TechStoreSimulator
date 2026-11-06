@@ -121,9 +121,13 @@ public:
 	float DeliverySpeed = 1.f;
 	float EtaScale = 1.f;
 
+	/** A shelf slot changed: save soon (a few seconds later, so a burst of stocking is one write). */
+	void NoteStockChanged() { bSaveDirty = true; }
+
 	FSimpleMulticastDelegate OnChanged;
 
 private:
+	void RestoreShelves();
 	void ApplyUpgrade(FName Id);
 	void CheckAchievements();
 	void Unlock(const TCHAR* Id);
@@ -139,6 +143,12 @@ private:
 	UPROPERTY() TArray<FTSSOrder> Orders;
 	UPROPERTY() TArray<FName> Upgrades;
 	UPROPERTY() TArray<FName> Achievements;
+
+	/** Shelf contents read from the save; kept until they are put on the shelves (and re-saved untouched until then). */
+	UPROPERTY() TArray<FTSSShelfSave> LoadedShelfStock;
+	bool bShelvesRestored = false;
+	bool bSaveDirty = false;
+	float DirtyTimer = 0.f;
 
 	FString SlotName;
 	bool bTruckActive = false;

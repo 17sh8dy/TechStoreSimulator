@@ -6,7 +6,7 @@
 #include "TSSBusinessTypes.h"
 #include "TSSBusinessSave.generated.h"
 
-/** Everything about the business that survives quitting the game. (Shelf stock is not saved yet.) */
+/** Everything about the business that survives quitting the game. */
 UCLASS()
 class UTSSBusinessSave : public USaveGame
 {
@@ -41,4 +41,8 @@ public:
 
 	// Where the owner has put shelves and the computer
 	UPROPERTY() TArray<FTSSMovedObject> MovedObjects;
+
+	// What is on the shelves, and the shelf price of each product (indexed by ETSSProduct)
+	UPROPERTY() TArray<FTSSShelfSave> ShelfStock;
+	UPROPERTY() TArray<int32> Prices;
 };

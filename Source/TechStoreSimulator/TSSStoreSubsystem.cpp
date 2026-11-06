@@ -68,6 +68,8 @@ void UTSSStoreSubsystem::ExportTo(UTSSBusinessSave* S) const
 	S->ProductsSold = ProductsSold; S->OrderSpend = OrderSpend; S->UpgradeSpend = UpgradeSpend; S->Day = Day;
 	S->Transactions = Transactions;
 	S->bStoreOpen = bOpen;
+	S->Prices.Reset();
+	for (int32 i = 0; i < static_cast<int32>(ETSSProduct::Count); ++i) S->Prices.Add(Prices[i]);
 }
 
 void UTSSStoreSubsystem::ImportFrom(const UTSSBusinessSave* S)
@@ -77,5 +79,9 @@ void UTSSStoreSubsystem::ImportFrom(const UTSSBusinessSave* S)
 	ProductsSold = S->ProductsSold; OrderSpend = S->OrderSpend; UpgradeSpend = S->UpgradeSpend; Day = FMath::Max(1, S->Day);
 	Transactions = S->Transactions;
 	bOpen = S->bStoreOpen;
+	if (S->Prices.Num() == static_cast<int32>(ETSSProduct::Count))
+	{
+		for (int32 i = 0; i < S->Prices.Num(); ++i) Prices[i] = FMath::Clamp(S->Prices[i], 1, 99999);
+	}
 	OnChanged.Broadcast();
 }

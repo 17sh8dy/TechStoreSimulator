@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "TSSInteractable.h"
 #include "TSSProducts.h"
+#include "TSSBusinessTypes.h"
 #include "TSSShelf.generated.h"
 
 class UStaticMeshComponent;
@@ -43,6 +44,9 @@ public:
 	static void CollectStock(UWorld* World, TArray<FTSSStockRef>& Out);
 	ETSSProduct GetSlotProduct(int32 Slot) const { return Slots[Slot].Product; }
 	int32 GetSlotQty(int32 Slot) const { return Slots[Slot].Qty; }
+	/** Saving: the contents of every slot, and putting them back. Import clamps to what a slot can hold. */
+	void ExportSlots(TArray<FTSSShelfSlotSave>& Out) const;
+	void ImportSlots(const TArray<FTSSShelfSlotSave>& In);
 	/** Customer-side stock handling (the player goes through Interact). */
 	bool TakeOne(int32 Slot, ETSSProduct& OutProduct);
 	bool PutBack(int32 Slot, ETSSProduct Product);
@@ -66,6 +70,7 @@ private:
 	void RefreshSlot(int32 Index);
 	void RefreshTag(int32 Index);
 	void RefreshAllTags();
+	void NotifyStockChanged();
 	/** Local position of the slot centre, on the board surface, at the front edge. */
 	FVector SlotOrigin(int32 Index) const;
 

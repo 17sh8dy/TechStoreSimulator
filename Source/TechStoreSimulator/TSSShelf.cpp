@@ -3,6 +3,7 @@
 #include "TSSProductBox.h"
 #include "TSSProductItem.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSBusinessSubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "EngineUtils.h"
@@ -259,6 +260,7 @@ void ATSSShelf::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 		return;
 	}
 	RefreshSlot(Index);
+	NotifyStockChanged();
 }
 
 void ATSSShelf::Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Direction)
@@ -288,6 +290,7 @@ bool ATSSShelf::TakeOne(int32 Slot, ETSSProduct& OutProduct)
 	--S.Qty;
 	if (S.Qty == 0) S.Product = ETSSProduct::None;
 	RefreshSlot(Slot);
+	NotifyStockChanged();
 	return true;
 }
 
@@ -299,6 +302,7 @@ bool ATSSShelf::PutBack(int32 Slot, ETSSProduct Product)
 	S.Product = Product;
 	++S.Qty;
 	RefreshSlot(Slot);
+	NotifyStockChanged();
 	return true;
 }
 
@@ -311,6 +315,38 @@ FVector ATSSShelf::GetStandPoint(int32 Slot) const
 FVector ATSSShelf::GetSlotWorldPos(int32 Slot) const
 {
 	return GetActorTransform().TransformPosition(SlotOrigin(Slot));
+}
+
+void ATSSShelf::ExportSlots(TArray<FTSSShelfSlotSave>& Out) const
+{
+	Out.Reset();
+	for (const FSlot& S : Slots)
+	{
+		FTSSShelfSlotSave& Item = Out.AddDefaulted_GetRef();
+		Item.Product = S.Qty > 0 ? S.Product : ETSSProduct::None;
+		Item.Qty = S.Qty > 0 ? S.Qty : 0;
+	}
+}
+
+void ATSSShelf::ImportSlots(const TArray<FTSSShelfSlotSave>& In)
+{
+	for (int32 i = 0; i < Slots.Num(); ++i)
+	{
+		FSlot& S = Slots[i];
+		S.Product = ETSSProduct::None;
+		S.Qty = 0;
+		if (In.IsValidIndex(i) && In[i].Product != ETSSProduct::None && In[i].Product != ETSSProduct::Count && In[i].Qty > 0)
+		{
+			S.Product = In[i].Product;
+			S.Qty = FMath::Min(In[i].Qty, TSSProductDef(S.Product).SlotCapacity());
+		}
+		RefreshSlot(i);
+	}
+}
+
+void ATSSShelf::NotifyStockChanged()
+{
+	if (UTSSBusinessSubsystem* Biz = GetWorld() ? GetWorld()->GetSubsystem<UTSSBusinessSubsystem>() : nullptr) Biz->NoteStockChanged();
 }
 
 FName ATSSShelf::LayoutKey() const

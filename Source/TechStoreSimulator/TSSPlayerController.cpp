@@ -1050,6 +1050,39 @@ void ATSSPlayerController::TSSDeskTest()
 				Check(TEXT("the save holds the money, revenue and customers"), Save->Money == Store->GetMoney() && Save->LifetimeRevenue == Store->GetLifetimeRevenue() && Save->Served == Store->GetServed() && Save->ProductsSold == Store->GetProductsSold());
 				Check(TEXT("the save holds XP, upgrades, orders and achievements"), Save->XP == Biz->GetXP() && Save->Upgrades.Contains(FName(TEXT("shelf_1"))) && Save->Orders.Num() == Biz->GetOrders().Num() && Save->Achievements.Contains(FName(TEXT("first_delivery"))));
 				Check(TEXT("the save holds the sales log"), Save->Transactions.Num() == Store->GetTransactions().Num());
+					// Shelf stock: every shelf is in the save with the quantities it really holds, and prices are saved too.
+					bool bStockMatches = Save->ShelfStock.Num() > 0 && Save->Prices.Num() == static_cast<int32>(ETSSProduct::Count);
+					int32 SavedUnits = 0, LiveUnits = 0;
+					for (TActorIterator<ATSSShelf> ShIt(GetWorld()); ShIt; ++ShIt)
+					{
+						const FTSSShelfSave* Entry = Save->ShelfStock.FindByPredicate([&ShIt](const FTSSShelfSave& E) { return E.Key == ShIt->LayoutKey(); });
+						if (!Entry) { bStockMatches = false; continue; }
+						for (int32 s = 0; s < ATSSShelf::Tiers * ATSSShelf::Columns; ++s)
+						{
+							LiveUnits += ShIt->GetSlotQty(s);
+							if (Entry->Slots.IsValidIndex(s))
+							{
+								SavedUnits += Entry->Slots[s].Qty;
+								if (Entry->Slots[s].Qty != ShIt->GetSlotQty(s) || (Entry->Slots[s].Qty > 0 && Entry->Slots[s].Product != ShIt->GetSlotProduct(s))) bStockMatches = false;
+							}
+						}
+					}
+					Check(TEXT("the save holds what is on every shelf, and the shelf prices"), bStockMatches && LiveUnits > 0 && SavedUnits == LiveUnits);
+					// Round trip: empty each shelf, then restore it from its exported form and compare.
+					bool bRoundTrip = true;
+					for (TActorIterator<ATSSShelf> ShIt(GetWorld()); ShIt; ++ShIt)
+					{
+						TArray<FTSSShelfSlotSave> Before, After;
+						ShIt->ExportSlots(Before);
+						ShIt->ImportSlots(TArray<FTSSShelfSlotSave>());
+						ShIt->ExportSlots(After);
+						for (const FTSSShelfSlotSave& Z : After) if (Z.Qty != 0) bRoundTrip = false;
+						ShIt->ImportSlots(Before);
+						After.Reset();
+						ShIt->ExportSlots(After);
+						for (int32 s = 0; s < Before.Num(); ++s) if (Before[s].Qty != After[s].Qty || Before[s].Product != After[s].Product) bRoundTrip = false;
+					}
+					Check(TEXT("shelf stock restores exactly from its saved form"), bRoundTrip);
 			}
 			Check(TEXT("Employees and Contracts are locked sections with a level requirement"),
 				TSSDeskPages().Num() == 8 && TSSDeskPages()[4]->RequiredLevel() > 0 && TSSDeskPages()[5]->RequiredLevel() > 0

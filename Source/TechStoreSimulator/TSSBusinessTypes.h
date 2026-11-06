@@ -24,6 +24,27 @@ struct FTSSMovedObject
 	UPROPERTY() int32 Anchor = 0;
 };
 
+/** What one shelf slot holds. */
+USTRUCT()
+struct FTSSShelfSlotSave
+{
+	GENERATED_BODY()
+
+	UPROPERTY() ETSSProduct Product = ETSSProduct::None;
+	UPROPERTY() int32 Qty = 0;
+};
+
+/** The stock on one shelf (Slots is tiers x columns, in slot order). */
+USTRUCT()
+struct FTSSShelfSave
+{
+	GENERATED_BODY()
+
+	/** ATSSInteractable::LayoutKey of the shelf. */
+	UPROPERTY() FName Key;
+	UPROPERTY() TArray<FTSSShelfSlotSave> Slots;
+};
+
 USTRUCT()
 struct FTSSOrderLine
 {

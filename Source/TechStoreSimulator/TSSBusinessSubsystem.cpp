@@ -113,6 +113,7 @@ void UTSSBusinessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		Upgrades = Save->Upgrades;
 		Achievements = Save->Achievements;
 		MovedObjects = Save->MovedObjects;
+		LoadedShelfStock = Save->ShelfStock;
 		// Parcels are not saved: an order that had already arrived is simply re-delivered.
 		for (FTSSOrder& O : Orders)
 		{
@@ -147,8 +148,24 @@ void UTSSBusinessSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
 	for (const FName& U : Upgrades) ApplyUpgrade(U);
+	RestoreShelves();
 	// The shell has finished sliding walls and wall-anchored furniture by now; then put the owner's own layout back.
 	InWorld.GetTimerManager().SetTimer(LayoutTimer, FTimerDelegate::CreateUObject(this, &UTSSBusinessSubsystem::ApplyLayout), 0.5f, false);
+}
+
+void UTSSBusinessSubsystem::RestoreShelves()
+{
+	bShelvesRestored = true;
+	if (LoadedShelfStock.Num() == 0) return;
+	for (TActorIterator<ATSSShelf> It(GetWorld()); It; ++It)
+	{
+		const FName Key = It->LayoutKey();
+		if (const FTSSShelfSave* Saved = LoadedShelfStock.FindByPredicate([Key](const FTSSShelfSave& S) { return S.Key == Key; }))
+		{
+			It->ImportSlots(Saved->Slots);
+		}
+	}
+	LoadedShelfStock.Reset();
 }
 
 void UTSSBusinessSubsystem::FinishMove(ATSSInteractable* Obj)
@@ -212,6 +229,7 @@ void UTSSBusinessSubsystem::HandleSale(const FTSSTransaction& Sale)
 
 void UTSSBusinessSubsystem::HandleStoreChanged()
 {
+	bSaveDirty = true;   // covers shelf price changes, which only go through the store
 	CheckAchievements();
 	OnChanged.Broadcast();
 }
@@ -228,6 +246,21 @@ void UTSSBusinessSubsystem::SaveNow()
 	Save->Upgrades = Upgrades;
 	Save->Achievements = Achievements;
 	Save->MovedObjects = MovedObjects;
+	if (!bShelvesRestored)
+	{
+		Save->ShelfStock = LoadedShelfStock;   // the shelves are not back yet: do not overwrite the saved stock with empty ones
+	}
+	else if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ATSSShelf> It(World); It; ++It)
+		{
+			FTSSShelfSave& Entry = Save->ShelfStock.AddDefaulted_GetRef();
+			Entry.Key = It->LayoutKey();
+			It->ExportSlots(Entry.Slots);
+		}
+	}
+	bSaveDirty = false;
+	DirtyTimer = 0.f;
 	UGameplayStatics::SaveGameToSlot(Save, SlotName, 0);
 }
 
@@ -481,6 +514,8 @@ void UTSSBusinessSubsystem::Tick(float DeltaTime)
 			}
 		}
 	}
+
+	if (bSaveDirty && (DirtyTimer += DeltaTime) > 3.f) SaveNow();
 
 	AutosaveTimer += DeltaTime;
 	if (AutosaveTimer > 30.f)
