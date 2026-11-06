@@ -6,14 +6,29 @@
 
 const FTSSProductDef& TSSProductDef(ETSSProduct Product)
 {
+	// Name, wholesale cost, box (depth, width, height), box colour, blurb, category, brand, packaging texture, level.
 	static const FTSSProductDef Defs[] = {
-		{ TEXT("None"),        0,   FVector(1, 1, 1),     FLinearColor::Black },
-		{ TEXT("Smartphone"),  300, FVector(6, 9, 17),    FLinearColor(0.10f, 0.65f, 0.95f), TEXT("Pocket computer with a camera. Small, easy to stock, always in demand.") },
-		{ TEXT("Laptop"),      700, FVector(6, 34, 24),   FLinearColor(0.70f, 0.72f, 0.78f), TEXT("Portable workstation. High price, high margin, but the boxes take shelf space.") },
-		{ TEXT("Headphones"),  120, FVector(16, 18, 20),  FLinearColor(0.85f, 0.15f, 0.25f), TEXT("Over-ear audio. An impulse buy, tempting next to the checkout.") },
-		{ TEXT("Console"),     400, FVector(22, 32, 10),  FLinearColor(0.30f, 0.20f, 0.85f), TEXT("Home gaming console. Popular, mid margin, bulky box.") },
-		{ TEXT("Monitor"),     250, FVector(10, 40, 30),  FLinearColor(0.12f, 0.12f, 0.14f), TEXT("Desktop display. A steady seller for home offices.") },
-		{ TEXT("Keyboard"),    60,  FVector(14, 38, 3),   FLinearColor(0.95f, 0.65f, 0.10f), TEXT("Mechanical keyboard. Cheap, quick to sell, low margin.") },
+		{ TEXT("None"), 0, FVector(1, 1, 1), FLinearColor::Black },
+		{ TEXT("Smartphone"), 300, FVector(6, 9, 17), FLinearColor(0.16f, 0.2f, 0.62f),
+			TEXT("Pocket computer with a camera. Small, easy to stock, always in demand."), TEXT("Phones"), TEXT("LUMIO"), TEXT("T_Pack_Phone"), 1 },
+		{ TEXT("Laptop"), 700, FVector(6, 36, 25), FLinearColor(0.1f, 0.42f, 0.42f),
+			TEXT("Portable workstation. High price, high margin, but the boxes take shelf space."), TEXT("Computers"), TEXT("ZENTO"), TEXT("T_Pack_Laptop"), 1 },
+		{ TEXT("Headphones"), 120, FVector(10, 19, 22), FLinearColor(0.12f, 0.08f, 0.05f),
+			TEXT("Over-ear audio. An impulse buy, tempting next to the checkout."), TEXT("Audio"), TEXT("VEXA"), TEXT("T_Pack_Headphones"), 1 },
+		{ TEXT("Console"), 400, FVector(12, 36, 28), FLinearColor(0.36f, 0.12f, 0.5f),
+			TEXT("Home gaming console. Popular, mid margin, bulky box."), TEXT("Gaming"), TEXT("KYRA"), TEXT("T_Pack_Console"), 1 },
+		{ TEXT("Monitor"), 250, FVector(10, 46, 34), FLinearColor(0.1f, 0.42f, 0.42f),
+			TEXT("Desktop display. A steady seller for home offices."), TEXT("Displays"), TEXT("ZENTO"), TEXT("T_Pack_Monitor"), 1 },
+		{ TEXT("Keyboard"), 60, FVector(6, 44, 15), FLinearColor(0.14f, 0.46f, 0.24f),
+			TEXT("Mechanical keyboard. Cheap, quick to sell, low margin."), TEXT("Accessories"), TEXT("TERNO"), TEXT("T_Pack_Keyboard"), 1 },
+		{ TEXT("Tablet"), 350, FVector(5, 22, 28), FLinearColor(0.16f, 0.2f, 0.62f),
+			TEXT("Ten-inch tablet with a stylus. A family favourite with a healthy margin."), TEXT("Computers"), TEXT("LUMIO"), TEXT("T_Pack_Tablet"), 2 },
+		{ TEXT("Earbuds"), 80, FVector(4, 7, 11), FLinearColor(0.12f, 0.08f, 0.05f),
+			TEXT("True wireless earbuds. Tiny box, great for small shelves and impulse buys."), TEXT("Audio"), TEXT("VEXA"), TEXT("T_Pack_Earbuds"), 1 },
+		{ TEXT("Smartwatch"), 220, FVector(7, 10, 12), FLinearColor(0.36f, 0.12f, 0.5f),
+			TEXT("Fitness and notifications on your wrist. A strong seller once word gets around."), TEXT("Wearables"), TEXT("KYRA"), TEXT("T_Pack_Smartwatch"), 3 },
+		{ TEXT("Speaker"), 150, FVector(14, 14, 22), FLinearColor(0.14f, 0.46f, 0.24f),
+			TEXT("Waterproof portable speaker. Sells well in the warm months."), TEXT("Audio"), TEXT("TERNO"), TEXT("T_Pack_Speaker"), 2 },
 	};
 	const int32 Index = FMath::Clamp(static_cast<int32>(Product), 0, static_cast<int32>(ETSSProduct::Count) - 1);
 	return Defs[Index];

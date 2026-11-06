@@ -1,8 +1,10 @@
 #include "TSSShelf.h"
 #include "TSSCharacter.h"
+#include "TSSProductBox.h"
 #include "TSSProductItem.h"
 #include "TSSStoreSubsystem.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "EngineUtils.h"
 
 namespace
@@ -11,6 +13,10 @@ namespace
 	constexpr float ColumnY[ATSSShelf::Columns] = { -75.f, -25.f, 25.f, 75.f };
 	constexpr float BoardThickness = 3.f;
 	constexpr float FrontEdge = 24.f;
+
+	const FLinearColor ShelfGraphite(0.05f, 0.055f, 0.07f);
+	const FLinearColor ShelfBoard(0.78f, 0.8f, 0.84f);
+	const FLinearColor ShelfAccent(0.06f, 0.3f, 0.95f);
 }
 
 ATSSShelf::ATSSShelf()
@@ -18,7 +24,7 @@ ATSSShelf::ATSSShelf()
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
 
-	auto AddPart = [this, Root](const TCHAR* Name, FVector Loc, FVector Size)
+	auto AddPart = [this, Root](const TCHAR* Name, FVector Loc, FVector Size, FLinearColor Color)
 	{
 		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
 		Part->SetupAttachment(Root);
@@ -26,14 +32,60 @@ ATSSShelf::ATSSShelf()
 		Part->SetRelativeLocation(Loc);
 		Part->SetRelativeScale3D(Size / 100.f);
 		FrameParts.Add(Part);
+		FrameColors.Add(Color);
+		return Part;
 	};
-	AddPart(TEXT("Back"), FVector(-24.f, 0.f, 100.f), FVector(2.f, 204.f, 200.f));
-	AddPart(TEXT("Left"), FVector(0.f, -102.f, 100.f), FVector(50.f, 4.f, 200.f));
-	AddPart(TEXT("Right"), FVector(0.f, 102.f, 100.f), FVector(50.f, 4.f, 200.f));
-	AddPart(TEXT("Top"), FVector(0.f, 0.f, 201.f), FVector(50.f, 204.f, 4.f));
-	AddPart(TEXT("Tier0"), FVector(0.f, 0.f, TierZ[0]), FVector(48.f, 200.f, BoardThickness));
-	AddPart(TEXT("Tier1"), FVector(0.f, 0.f, TierZ[1]), FVector(48.f, 200.f, BoardThickness));
-	AddPart(TEXT("Tier2"), FVector(0.f, 0.f, TierZ[2]), FVector(48.f, 200.f, BoardThickness));
+	// Graphite frame, light boards with a blue front edge, a lit header sign on top.
+	AddPart(TEXT("Back"), FVector(-24.f, 0.f, 100.f), FVector(2.f, 204.f, 200.f), FLinearColor(0.11f, 0.12f, 0.15f));
+	AddPart(TEXT("Left"), FVector(0.f, -102.f, 100.f), FVector(50.f, 4.f, 200.f), ShelfGraphite);
+	AddPart(TEXT("Right"), FVector(0.f, 102.f, 100.f), FVector(50.f, 4.f, 200.f), ShelfGraphite);
+	AddPart(TEXT("Top"), FVector(0.f, 0.f, 201.f), FVector(50.f, 204.f, 4.f), ShelfGraphite);
+	for (int32 t = 0; t < Tiers; ++t)
+	{
+		const FString N = FString::FromInt(t);
+		AddPart(*(TEXT("Tier") + N), FVector(0.f, 0.f, TierZ[t]), FVector(48.f, 200.f, BoardThickness), ShelfBoard);
+		AddPart(*(TEXT("Edge") + N), FVector(FrontEdge + 0.2f, 0.f, TierZ[t] + 0.2f), FVector(0.5f, 200.f, 1.4f), ShelfAccent);
+	}
+	AddPart(TEXT("Header"), FVector(FrontEdge - 1.f, 0.f, 215.f), FVector(2.f, 204.f, 24.f), FLinearColor(0.03f, 0.035f, 0.05f));
+	AddPart(TEXT("HeaderBar"), FVector(FrontEdge + 0.2f, 0.f, 204.5f), FVector(0.6f, 204.f, 1.6f), ShelfAccent);
+
+	UTextRenderComponent* Sign = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Sign"));
+	Sign->SetupAttachment(Root);
+	Sign->SetRelativeLocation(FVector(FrontEdge + 0.3f, 0.f, 215.f));
+	Sign->SetWorldSize(13.f);
+	Sign->SetHorizontalAlignment(EHTA_Center);
+	Sign->SetVerticalAlignment(EVRTA_TextCenter);
+	Sign->SetTextRenderColor(FColor(230, 240, 255));
+	Sign->SetText(FText::FromString(TEXT("ELECTRONICS")));
+	Sign->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// One price tag under each slot.
+	for (int32 i = 0; i < Tiers * Columns; ++i)
+	{
+		const FString N = FString::FromInt(i);
+		const FVector Tag(FrontEdge + 0.4f, ColumnY[i % Columns], TierZ[i / Columns] - 4.6f);
+		UStaticMeshComponent* Board = CreateDefaultSubobject<UStaticMeshComponent>(*(TEXT("TagBoard") + N));
+		Board->SetupAttachment(Root);
+		Board->SetStaticMesh(TSSCubeMesh());
+		Board->SetRelativeLocation(Tag);
+		Board->SetRelativeScale3D(FVector(0.006f, 0.4f, 0.075f));
+		Board->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Board->SetVisibility(false);
+		TagBoards.Add(Board);
+		FrameParts.Add(Board);
+		FrameColors.Add(FLinearColor(0.95f, 0.95f, 0.9f));
+
+		UTextRenderComponent* Text = CreateDefaultSubobject<UTextRenderComponent>(*(TEXT("TagText") + N));
+		Text->SetupAttachment(Root);
+		Text->SetRelativeLocation(Tag + FVector(0.5f, 0.f, 0.f));
+		Text->SetWorldSize(2.6f);
+		Text->SetHorizontalAlignment(EHTA_Center);
+		Text->SetVerticalAlignment(EVRTA_TextCenter);
+		Text->SetTextRenderColor(FColor(15, 15, 20));
+		Text->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Text->SetText(FText::GetEmpty());
+		TagTexts.Add(Text);
+	}
 
 	Slots.SetNum(Tiers * Columns);
 }
@@ -41,10 +93,28 @@ ATSSShelf::ATSSShelf()
 void ATSSShelf::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	for (UStaticMeshComponent* Part : FrameParts)
+	for (int32 i = 0; i < FrameParts.Num() && i < FrameColors.Num(); ++i)
 	{
-		TSSApplyColor(Part, FLinearColor(0.82f, 0.84f, 0.88f));
+		if (FrameParts[i]) TSSApplyColor(FrameParts[i], FrameColors[i]);
 	}
+}
+
+void ATSSShelf::BeginPlay()
+{
+	Super::BeginPlay();
+	if (UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>())
+	{
+		StoreHandle = Store->OnChanged.AddUObject(this, &ATSSShelf::RefreshAllTags);
+	}
+}
+
+void ATSSShelf::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (UTSSStoreSubsystem* Store = World->GetSubsystem<UTSSStoreSubsystem>()) Store->OnChanged.Remove(StoreHandle);
+	}
+	Super::EndPlay(Reason);
 }
 
 FVector ATSSShelf::SlotOrigin(int32 Index) const
@@ -76,6 +146,24 @@ int32 ATSSShelf::SlotFromHit(const FHitResult& Hit) const
 	return Tier * Columns + Col;
 }
 
+void ATSSShelf::RefreshTag(int32 Index)
+{
+	if (!TagTexts.IsValidIndex(Index)) return;
+	const FSlot& Slot = Slots[Index];
+	const UTSSStoreSubsystem* Store = GetWorld() ? GetWorld()->GetSubsystem<UTSSStoreSubsystem>() : nullptr;
+	const bool bShow = Slot.Qty > 0 && Store;
+	TagBoards[Index]->SetVisibility(bShow);
+	TagTexts[Index]->SetVisibility(bShow);
+	if (!bShow) return;
+	const FString Text = FString::Printf(TEXT("%s\n$%d"), TSSProductDef(Slot.Product).Name, Store->GetPrice(Slot.Product));
+	if (!TagTexts[Index]->Text.ToString().Equals(Text)) TagTexts[Index]->SetText(FText::FromString(Text));
+}
+
+void ATSSShelf::RefreshAllTags()
+{
+	for (int32 i = 0; i < Slots.Num(); ++i) RefreshTag(i);
+}
+
 void ATSSShelf::RefreshSlot(int32 Index)
 {
 	FSlot& Slot = Slots[Index];
@@ -83,8 +171,7 @@ void ATSSShelf::RefreshSlot(int32 Index)
 
 	while (Slot.Boxes.Num() < Slot.Qty)
 	{
-		UStaticMeshComponent* Box = NewObject<UStaticMeshComponent>(this);
-		Box->SetStaticMesh(TSSCubeMesh());
+		UTSSProductBoxComponent* Box = NewObject<UTSSProductBoxComponent>(this);
 		Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Box->SetupAttachment(GetRootComponent());
 		Box->RegisterComponent();
@@ -94,17 +181,17 @@ void ATSSShelf::RefreshSlot(int32 Index)
 	const FVector Origin = SlotOrigin(Index);
 	for (int32 i = 0; i < Slot.Boxes.Num(); ++i)
 	{
-		UStaticMeshComponent* Box = Slot.Boxes[i];
+		UTSSProductBoxComponent* Box = Slot.Boxes[i];
 		const bool bUsed = i < Slot.Qty;
-		Box->SetVisibility(bUsed);
+		Box->SetVisibility(bUsed, true);
 		if (!bUsed) continue;
-		Box->SetRelativeScale3D(Def.BoxSize / 100.f);
+		Box->SetProduct(Slot.Product);
 		Box->SetRelativeLocation(FVector(
 			Origin.X - Def.BoxSize.X * 0.5f - 1.f - i * (Def.BoxSize.X + 1.5f),
 			Origin.Y,
 			Origin.Z + Def.BoxSize.Z * 0.5f));
-		TSSApplyColor(Box, Def.Color);
 	}
+	RefreshTag(Index);
 }
 
 FString ATSSShelf::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const

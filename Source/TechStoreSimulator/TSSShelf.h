@@ -6,6 +6,8 @@
 #include "TSSShelf.generated.h"
 
 class UStaticMeshComponent;
+class UTextRenderComponent;
+class UTSSProductBoxComponent;
 class ATSSShelf;
 
 /** One shelf slot somewhere in the world (what a customer wants to buy). */
@@ -16,7 +18,7 @@ struct FTSSStockRef
 };
 
 /**
- * A shelving unit: 3 tiers x 4 slots. Each slot holds one kind of product, a few boxes deep.
+ * A shelving unit: 3 tiers x 4 slots. Each slot holds one kind of product, a few boxes deep, with a live price tag.
  * Its front faces local +X.
  */
 UCLASS()
@@ -27,6 +29,8 @@ class ATSSShelf : public ATSSInteractable
 public:
 	ATSSShelf();
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 
 	virtual FString GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const override;
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) override;
@@ -52,14 +56,20 @@ private:
 	{
 		ETSSProduct Product = ETSSProduct::None;
 		int32 Qty = 0;
-		TArray<TObjectPtr<UStaticMeshComponent>> Boxes;
+		TArray<TObjectPtr<UTSSProductBoxComponent>> Boxes;
 	};
 
 	int32 SlotFromHit(const FHitResult& Hit) const;
 	void RefreshSlot(int32 Index);
+	void RefreshTag(int32 Index);
+	void RefreshAllTags();
 	/** Local position of the slot centre, on the board surface, at the front edge. */
 	FVector SlotOrigin(int32 Index) const;
 
 	TArray<FSlot> Slots;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> FrameParts;
+	TArray<FLinearColor> FrameColors;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> TagBoards;
+	UPROPERTY() TArray<TObjectPtr<UTextRenderComponent>> TagTexts;
+	FDelegateHandle StoreHandle;
 };

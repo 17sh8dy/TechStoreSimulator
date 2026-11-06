@@ -19,7 +19,7 @@ ATSSCrate::ATSSCrate()
 	Label->SetupAttachment(Body);
 	Label->SetRelativeLocation(FVector(0.f, 0.f, 95.f));
 	Label->SetRelativeScale3D(FVector(1.f / 0.6f, 1.f / 0.9f, 1.f / 0.6f)); // undo the body's squash
-	Label->SetWorldSize(12.f);
+	Label->SetWorldSize(8.5f);
 	Label->SetHorizontalAlignment(EHTA_Center);
 	Label->SetTextRenderColor(FColor::White);
 	Label->SetCollisionEnabled(ECollisionEnabled::NoCollision);

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "TSSProducts.generated.h"
 
+/** New products are only ever appended before Count: prices and saves index by this value. */
 UENUM(BlueprintType)
 enum class ETSSProduct : uint8
 {
@@ -13,10 +14,17 @@ enum class ETSSProduct : uint8
 	Console,
 	Monitor,
 	Keyboard,
+	Tablet,
+	Earbuds,
+	Smartwatch,
+	Speaker,
 	Count UMETA(Hidden)
 };
 
-/** Static catalogue entry. Sizes are the retail box in cm: X = depth (front to back), Y = width, Z = height. */
+/**
+ * Static catalogue entry. Sizes are the retail box in cm: X = depth (front to back), Y = width, Z = height.
+ * Brands are invented. Texture names a packaging image in /Game/TSS/Textures (made by Scripts/make_packaging.py).
+ */
 struct FTSSProductDef
 {
 	const TCHAR* Name;
@@ -24,6 +32,11 @@ struct FTSSProductDef
 	FVector BoxSize;
 	FLinearColor Color;
 	const TCHAR* Blurb = TEXT("");
+	const TCHAR* Category = TEXT("");
+	const TCHAR* Brand = TEXT("");
+	const TCHAR* Texture = TEXT("");
+	/** Business level needed before this can be ordered from the wholesaler. */
+	int32 MinLevel = 1;
 
 	/** How many of this box fit front-to-back in one shelf slot (shelf depth is 50 cm). */
 	int32 SlotCapacity() const { return FMath::Clamp(FMath::FloorToInt(46.f / BoxSize.X), 1, 4); }
