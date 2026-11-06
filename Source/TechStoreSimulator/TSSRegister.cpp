@@ -165,11 +165,32 @@ void ATSSRegister::BeginTransaction(ATSSCustomer* Who, const TArray<FTSSBasketIt
 		ATSSProductItem* Item = GetWorld()->SpawnActor<ATSSProductItem>(ATSSProductItem::StaticClass(), FTransform(StagingSlot(i)), P);
 		if (!Item) continue;
 		Item->Init(Basket[i].Product, Basket[i].Price, this);
-		Item->PlaceAt(StagingSlot(i), GetActorRotation());
+		Item->SetActorLocationAndRotation(StagingSlot(i), GetActorRotation());
+		Item->SetCarried(true);   // hidden and untouchable until the customer puts it down
 		Items.Add(Item);
 	}
 	Phase = ETSSCheckoutPhase::Scanning;
-	SetNotice(TEXT("Scan the customer's items"), 4.f);
+	ItemsPlaced = 0;
+	SetNotice(TEXT("Customer is putting their items down..."), 5.f);
+}
+
+void ATSSRegister::RevealItem(int32 Index)
+{
+	if (!Items.IsValidIndex(Index) || !Items[Index]) return;
+	Items[Index]->PlaceAt(StagingSlot(Index), GetActorRotation());
+	++ItemsPlaced;
+	if (AllItemsPlaced()) SetNotice(TEXT("Scan the customer's items"), 5.f);
+}
+
+FVector ATSSRegister::CashPoint() const
+{
+	return CashPile->GetComponentLocation();
+}
+
+FVector ATSSRegister::TerminalTapPoint() const
+{
+	const ATSSCardTerminal* T = GetTerminal();
+	return T ? T->GetTapPoint() : GetActorLocation() + FVector(0.f, 0.f, TopZ + 25.f);
 }
 
 void ATSSRegister::Reset()
@@ -178,7 +199,7 @@ void ATSSRegister::Reset()
 	Items.Reset();
 	Lines.Reset();
 	ChangeBills.Reset();
-	Subtotal = Tax = Total = CashReceived = ChangeDue = ScannedCount = 0;
+	Subtotal = Tax = Total = CashReceived = ChangeDue = ScannedCount = ItemsPlaced = 0;
 	Method = ETSSPayMethod::None;
 	bCardApproved = false;
 	CashPile->SetVisibility(false);
@@ -243,6 +264,7 @@ FString ATSSRegister::KeyboardPrompt() const
 	case ETSSCheckoutPhase::CashDue:
 		return FString::Printf(TEXT("[E] Confirm change\nGiving $%d of $%d due"), GetChangeGiven(), ChangeDue);
 	case ETSSCheckoutPhase::Receipt: return TEXT("Hand over the receipt");
+	case ETSSCheckoutPhase::Collecting: return TEXT("The customer is collecting their shopping");
 	default: return TEXT("Waiting for the card payment...");
 	}
 }
@@ -395,11 +417,16 @@ void ATSSRegister::TakeReceipt()
 	if (Phase != ETSSCheckoutPhase::Receipt) return;
 	if (ATSSReceiptPrinter* P = GetPrinter()) P->Tear();
 	if (ATSSCardTerminal* T = GetTerminal()) T->SetCardPresent(false);
-	ATSSCustomer* Who = Customer;
+	Phase = ETSSCheckoutPhase::Collecting;
+	if (Customer) Customer->FinishCheckout();
+	else ReleaseSale();
+}
+
+void ATSSRegister::ReleaseSale()
+{
 	Customer = nullptr;
 	Reset();
 	Phase = ETSSCheckoutPhase::Idle;
-	if (Who) Who->FinishCheckout();
 }
 
 // ---- the counter surface --------------------------------------------------------------------------

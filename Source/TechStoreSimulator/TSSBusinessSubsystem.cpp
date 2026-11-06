@@ -2,6 +2,7 @@
 #include "TSSDeliveryActors.h"
 #include "TSSBusinessSave.h"
 #include "TSSShelf.h"
+#include "TSSStoreLayout.h"
 #include "TSSStoreSubsystem.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -9,11 +10,17 @@
 
 namespace
 {
-	// Positions for the shelf-unit upgrades: along the back wall, facing into the shop.
-	struct FShelfSpot { const TCHAR* Id; FVector Location; };
+	// Where each shelf-unit upgrade appears, in stage-0 coordinates; the anchor says which wall it lives against so it
+	// moves with that wall when the store is expanded. Left/right shelves face into the room.
+	struct FShelfSpot { const TCHAR* Id; FVector Location; float Yaw; TSSStoreLayout::EAnchor Anchor; };
 	const FShelfSpot ShelfSpots[] = {
-		{ TEXT("shelf_1"), FVector(-684.f, -390.f, 0.f) },
-		{ TEXT("shelf_2"), FVector(-684.f, -190.f, 0.f) },
+		{ TEXT("shelf_1"), FVector(150.f, 274.f, 0.f), -90.f, TSSStoreLayout::EAnchor::Right },    // stage 0: right wall
+		{ TEXT("shelf_2"), FVector(-60.f, -274.f, 0.f), 90.f, TSSStoreLayout::EAnchor::Left },     // stage 1
+		{ TEXT("shelf_3"), FVector(-60.f, 274.f, 0.f), -90.f, TSSStoreLayout::EAnchor::Right },
+		{ TEXT("shelf_4"), FVector(-275.f, -274.f, 0.f), 90.f, TSSStoreLayout::EAnchor::Left },    // stage 2
+		{ TEXT("shelf_5"), FVector(-275.f, 274.f, 0.f), -90.f, TSSStoreLayout::EAnchor::Right },
+		{ TEXT("shelf_6"), FVector(-490.f, -274.f, 0.f), 90.f, TSSStoreLayout::EAnchor::Left },
+		{ TEXT("shelf_7"), FVector(-490.f, 274.f, 0.f), -90.f, TSSStoreLayout::EAnchor::Right },
 	};
 }
 
@@ -27,16 +34,23 @@ bool UTSSBusinessSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 
 const TArray<FTSSUpgradeDef>& UTSSBusinessSubsystem::UpgradeCatalog()
 {
+	// Id, name, description, cost, min level, min store stage, implemented.
 	static const TArray<FTSSUpgradeDef> Defs = {
-		{ TEXT("supplier_fast"), TEXT("Express Supplier Contract"), TEXT("Wholesale orders arrive in half the time."), 400, 1, true },
-		{ TEXT("shelf_1"), TEXT("Extra Shelf Unit"), TEXT("Adds a 12-slot shelf unit along the back wall."), 350, 1, true },
-		{ TEXT("shelf_2"), TEXT("Second Extra Shelf Unit"), TEXT("Another 12-slot shelf unit next to the first."), 500, 2, true },
-		{ TEXT("storage"), TEXT("Back-Room Storage"), TEXT("Stock held in the back room for the shelves."), 1500, 3, false },
-		{ TEXT("equipment"), TEXT("Improved Computer"), TEXT("A faster machine and a newer StoreDesk."), 2000, 3, false },
-		{ TEXT("dept_gaming"), TEXT("Gaming Department"), TEXT("A dedicated area for consoles and accessories."), 3000, 4, false },
-		{ TEXT("employee"), TEXT("Hire a Cashier"), TEXT("An employee to run the register."), 2500, 4, false },
-		{ TEXT("larger_store"), TEXT("Larger Store"), TEXT("Move into a bigger unit with room to grow."), 5000, 5, false },
-		{ TEXT("supplier_premium"), TEXT("Premium Supplier Access"), TEXT("Unlock higher-end products."), 4000, 6, false },
+		{ TEXT("supplier_fast"), TEXT("Express Supplier Contract"), TEXT("Wholesale orders arrive in half the time."), 400, 1, 0, true },
+		{ TEXT("shelf_1"), TEXT("Extra Shelf Unit"), TEXT("A 12-slot shelf unit against the right wall."), 250, 1, 0, true },
+		{ TEXT("store_1"), TEXT("Store Expansion I"), TEXT("Knock through to the unit next door: 7 x 6 m becomes 10.5 x 8 m, with room for more shelves."), 1200, 2, 0, true },
+		{ TEXT("shelf_2"), TEXT("Shelf Unit: left wall"), TEXT("Another 12 slots along the left wall."), 350, 2, 1, true },
+		{ TEXT("shelf_3"), TEXT("Shelf Unit: right wall"), TEXT("Another 12 slots along the right wall."), 350, 2, 1, true },
+		{ TEXT("store_2"), TEXT("Store Expansion II"), TEXT("The full unit: 14 x 10 m. Plenty of room to fill."), 3500, 4, 1, true },
+		{ TEXT("shelf_4"), TEXT("Shelf Unit: far left wall"), TEXT("12 more slots at the back of the left wall."), 450, 3, 2, true },
+		{ TEXT("shelf_5"), TEXT("Shelf Unit: far right wall"), TEXT("12 more slots at the back of the right wall."), 450, 3, 2, true },
+		{ TEXT("shelf_6"), TEXT("Shelf Unit: rear left"), TEXT("The last spot on the left wall."), 550, 4, 2, true },
+		{ TEXT("shelf_7"), TEXT("Shelf Unit: rear right"), TEXT("The last spot on the right wall."), 550, 4, 2, true },
+		{ TEXT("storage"), TEXT("Back-Room Storage"), TEXT("Stock held in the back room for the shelves."), 1500, 3, 1, false },
+		{ TEXT("equipment"), TEXT("Improved Computer"), TEXT("A faster machine and a newer StoreDesk."), 2000, 3, 0, false },
+		{ TEXT("dept_gaming"), TEXT("Gaming Department"), TEXT("A dedicated area for consoles and accessories."), 3000, 4, 2, false },
+		{ TEXT("employee"), TEXT("Hire a Cashier"), TEXT("An employee to run the register."), 2500, 4, 1, false },
+		{ TEXT("supplier_premium"), TEXT("Premium Supplier Access"), TEXT("Unlock higher-end products."), 4000, 6, 2, false },
 	};
 	return Defs;
 }
@@ -249,6 +263,15 @@ bool UTSSBusinessSubsystem::PlaceOrder(const TArray<FTSSOrderLine>& InLines, FSt
 		Order.Lines.Add(L);
 	}
 	if (Order.Lines.Num() == 0) { Why = TEXT("Your cart is empty."); return false; }
+	for (const FTSSOrderLine& L : Order.Lines)
+	{
+		const FTSSProductDef& Def = TSSProductDef(L.Product);
+		if (Def.MinLevel > GetLevel())
+		{
+			Why = FString::Printf(TEXT("%s is not available yet: reach business level %d."), Def.Name, Def.MinLevel);
+			return false;
+		}
+	}
 	if (!Store.IsValid()) { Why = TEXT("No store."); return false; }
 
 	Order.Cost = OrderCost(Order.Lines);
@@ -314,6 +337,7 @@ bool UTSSBusinessSubsystem::CanBuyUpgrade(const FTSSUpgradeDef& Def, FString& Wh
 	if (!Def.bImplemented) { Why = TEXT("Not available yet."); return false; }
 	if (HasUpgrade(Def.Id)) { Why = TEXT("Already owned."); return false; }
 	if (GetLevel() < Def.MinLevel) { Why = FString::Printf(TEXT("Requires business level %d."), Def.MinLevel); return false; }
+	if (GetStoreStage() < Def.MinStage) { Why = FString::Printf(TEXT("Needs a bigger store first (%s)."), TSSStoreLayout::StageName(Def.MinStage)); return false; }
 	if (!Store.IsValid() || Store->GetMoney() < Def.Cost) { Why = FString::Printf(TEXT("Costs $%d."), Def.Cost); return false; }
 	return true;
 }
@@ -350,12 +374,15 @@ void UTSSBusinessSubsystem::ApplyUpgrade(FName Id)
 		}
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		if (ATSSShelf* Shelf = World->SpawnActor<ATSSShelf>(ATSSShelf::StaticClass(), FTransform(FRotator::ZeroRotator, Spot.Location), Params))
+		const FVector At = Spot.Location + TSSStoreLayout::AnchorDelta(Spot.Anchor, GetStoreStage());
+		if (ATSSShelf* Shelf = World->SpawnActor<ATSSShelf>(ATSSShelf::StaticClass(), FTransform(FRotator(0.f, Spot.Yaw, 0.f), At), Params))
 		{
 			Shelf->Tags.Add(Id);
+			Shelf->Tags.Add(TEXT("TSSUpgrade"));
+			Shelf->Tags.Add(TSSStoreLayout::AnchorTag(Spot.Anchor));
 		}
 	}
-	// "supplier_fast" has no world object: EtaFor() reads HasUpgrade().
+	// store_1 / store_2 are applied by the StoreShell (it watches GetStoreStage()); supplier_fast is read by EtaFor().
 }
 
 // ---- clock ----------------------------------------------------------------------------------------

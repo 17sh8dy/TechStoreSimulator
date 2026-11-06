@@ -85,6 +85,8 @@ public:
 	// ---- upgrades -------------------------------------------------------------------------------
 	static const TArray<FTSSUpgradeDef>& UpgradeCatalog();
 	bool HasUpgrade(FName Id) const { return Upgrades.Contains(Id); }
+	/** 0 = small shop, 1 = medium, 2 = full-size. Each store expansion upgrade adds one. */
+	int32 GetStoreStage() const { return (HasUpgrade(TEXT("store_1")) ? 1 : 0) + (HasUpgrade(TEXT("store_1")) && HasUpgrade(TEXT("store_2")) ? 1 : 0); }
 	bool CanBuyUpgrade(const FTSSUpgradeDef& Def, FString& Why) const;
 	bool BuyUpgrade(FName Id, FString& Why);
 

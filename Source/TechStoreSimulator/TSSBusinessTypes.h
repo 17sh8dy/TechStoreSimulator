@@ -49,6 +49,8 @@ struct FTSSUpgradeDef
 	const TCHAR* Description;
 	int32 Cost;
 	int32 MinLevel;
+	/** Store size stage needed first (0 = any). */
+	int32 MinStage;
 	/** False = shown in the catalog as planned, cannot be bought yet. */
 	bool bImplemented;
 };

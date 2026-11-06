@@ -6,7 +6,7 @@
 #include "TSSProductItem.generated.h"
 
 class ATSSRegister;
-class UStaticMeshComponent;
+class UTSSProductBoxComponent;
 
 /**
  * One physical product box a customer has put on the counter. The owner picks it up, scans it, and it goes to
@@ -36,5 +36,5 @@ public:
 	TWeakObjectPtr<ATSSRegister> Register;
 
 private:
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> Body;
+	UPROPERTY() TObjectPtr<UTSSProductBoxComponent> Body;
 };

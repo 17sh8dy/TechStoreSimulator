@@ -105,6 +105,17 @@ public:
 	ATSSReceiptPrinter* GetPrinter() const;
 	ATSSRegisterKeyboard* GetKeyboard() const;
 
+	// ---- where things happen on the counter (the customer's hands go here) -------------------------------
+	FVector StagingPoint(int32 Index) const { return StagingSlot(Index); }
+	FVector BaggingPoint(int32 Index) const { return BaggingSlot(Index); }
+	FVector CashPoint() const;
+	FVector TerminalTapPoint() const;
+	/** The customer puts item `Index` of their basket down on the counter (they are made hidden at the start). */
+	void RevealItem(int32 Index);
+	bool AllItemsPlaced() const { return ItemsPlaced >= Items.Num() && Items.Num() > 0; }
+	/** The customer has swept their shopping off the counter: the register is free for the next sale. */
+	void ReleaseSale();
+
 	/** Top of the counter, in the register's local Z. */
 	static constexpr float TopZ = 98.f;
 
@@ -141,6 +152,7 @@ private:
 	int32 Subtotal = 0, Tax = 0, Total = 0;
 	int32 CashReceived = 0, ChangeDue = 0, LastTotal = 0;
 	int32 ScannedCount = 0;
+	int32 ItemsPlaced = 0;
 	bool bCardApproved = false;
 	float PhaseTimer = 0.f;
 	FString Notice;

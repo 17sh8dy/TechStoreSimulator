@@ -1,13 +1,12 @@
 #include "TSSProductItem.h"
 #include "TSSCharacter.h"
 #include "TSSRegister.h"
-#include "Components/StaticMeshComponent.h"
+#include "TSSProductBox.h"
 
 ATSSProductItem::ATSSProductItem()
 {
-	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
+	Body = CreateDefaultSubobject<UTSSProductBoxComponent>(TEXT("Body"));
 	SetRootComponent(Body);
-	Body->SetStaticMesh(TSSCubeMesh());
 }
 
 void ATSSProductItem::Init(ETSSProduct InProduct, int32 InPrice, ATSSRegister* InRegister)
@@ -15,9 +14,7 @@ void ATSSProductItem::Init(ETSSProduct InProduct, int32 InPrice, ATSSRegister* I
 	Product = InProduct;
 	UnitPrice = InPrice;
 	Register = InRegister;
-	const FTSSProductDef& Def = TSSProductDef(Product);
-	Body->SetRelativeScale3D(Def.BoxSize / 100.f);
-	TSSApplyColor(Body, Def.Color);
+	Body->SetProduct(Product);
 }
 
 void ATSSProductItem::PlaceAt(const FVector& SurfacePoint, const FRotator& Rotation)

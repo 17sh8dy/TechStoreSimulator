@@ -12,6 +12,8 @@
 #include "TSSSettings.h"
 #include "TSSCustomerSubsystem.h"
 #include "TSSRegister.h"
+#include "TSSStoreLayout.h"
+#include "TSSStoreShell.h"
 #include "TSSBusinessSave.h"
 #include "TSSDeliveryActors.h"
 #include "TSSBusinessSubsystem.h"
@@ -335,7 +337,7 @@ void ATSSPlayerController::TSSCustomerTest()
 			switch (St->Step)
 			{
 			case 0: // customer reaches the counter and puts the basket down
-				if (Reg->GetPhase() != ETSSCheckoutPhase::Scanning) { if (bTimeout) Fail(TEXT("customer reached the counter with a basket")); return; }
+				if (Reg->GetPhase() != ETSSCheckoutPhase::Scanning || !Reg->AllItemsPlaced()) { if (bTimeout) Fail(TEXT("customer reached the counter and put their basket down")); return; }
 				{
 					const TArray<TObjectPtr<ATSSProductItem>>& Items = Reg->GetItems();
 					Check(TEXT("the basket is on the counter as real product items"), Items.Num() >= 1);
@@ -359,7 +361,7 @@ void ATSSPlayerController::TSSCustomerTest()
 					Check(TEXT("tax is 8% and total = subtotal + tax"), Reg->GetTax() == TSSMoney::TaxFor(St->ExpectedSub) && Reg->GetTotal() == St->ExpectedSub + Reg->GetTax());
 					Check(TEXT("monitor lines add up to the subtotal"), [&]() { int32 S = 0; for (const FTSSSaleLine& L : Reg->GetLines()) S += L.Total(); return S == Reg->GetSubtotal(); }());
 					St->ExpectedTotal = Reg->GetTotal();
-					Snap(FVector(110.f, -85.f, 0.f), FVector(17.f, -85.f, 125.f));
+					Snap(FVector(95.f, 70.f, 0.f), FVector(-24.f, 70.f, ATSSRegister::TopZ + 12.f));
 					St->Hold = 1.4f;
 					St->Step = 1; St->Elapsed = 0.f;
 				}
@@ -425,12 +427,15 @@ void ATSSPlayerController::TSSCustomerTest()
 				break;
 			case 5: // hand over the receipt; customer leaves
 				Reg->GetPrinter()->Interact(Me, FHitResult());
-				Check(TEXT("handing over the receipt frees the register"), Reg->GetPhase() == ETSSCheckoutPhase::Idle);
+				Check(TEXT("handing over the receipt lets the customer collect their shopping"), Reg->GetPhase() == ETSSCheckoutPhase::Collecting || Reg->GetPhase() == ETSSCheckoutPhase::Idle);
 				St->Step = 6; St->Elapsed = 0.f;
 				break;
 			case 6:
-				if (St->Customer.IsValid()) { if (bTimeout) Fail(TEXT("the customer left the shop")); return; }
+				if (St->Customer.IsValid()) { if (St->Elapsed > 90.f) Fail(TEXT("the customer left the shop")); return; }
 				Check(TEXT("the customer walked out and is gone"), true);
+				UE_LOG(LogTemp, Display, TEXT("TSS debug: phase=%d items=%d"), static_cast<int32>(Reg->GetPhase()), Reg->GetItems().Num());
+				for (ATSSProductItem* It : Reg->GetItems()) UE_LOG(LogTemp, Display, TEXT("TSS debug item %s at %s scanned=%d held=%d"), *GetNameSafe(It), *It->GetActorLocation().ToString(), It->bScanned, Me->GetHeldItem()==It);
+				Check(TEXT("the counter was cleared and the register is free for the next sale"), Reg->GetPhase() == ETSSCheckoutPhase::Idle && Reg->GetItems().Num() == 0);
 				++St->Run;
 				if (St->Run == 1) Spawn(ETSSPayMethod::Card);
 				else
@@ -539,12 +544,31 @@ void ATSSPlayerController::TSSDeskTest()
 	Check(TEXT("a planned upgrade cannot be bought yet"), !Biz->BuyUpgrade(TEXT("storage"), Why));
 	const int32 Shelves0 = CountShelves();
 	M0 = Store->GetMoney();
-	Check(TEXT("buying the shelf upgrade charges its price"), Biz->BuyUpgrade(TEXT("shelf_1"), Why) && Store->GetMoney() == M0 - 350);
+	Check(TEXT("buying the shelf upgrade charges its price"), Biz->BuyUpgrade(TEXT("shelf_1"), Why) && Store->GetMoney() == M0 - 250);
 	Check(TEXT("the shelf upgrade adds a real shelf to the shop"), CountShelves() == Shelves0 + 1);
 	ATSSShelf* NewShelf = nullptr;
 	for (TActorIterator<ATSSShelf> It(GetWorld()); It; ++It) if (It->ActorHasTag(TEXT("shelf_1"))) NewShelf = *It;
 	Check(TEXT("the new shelf is the upgrade's shelf"), NewShelf != nullptr);
-	Check(TEXT("a level-gated upgrade follows the level rule"), Biz->BuyUpgrade(TEXT("shelf_2"), Why) == (Biz->GetLevel() >= 2));
+	// ---- store size: the shop starts small and expands ------------------------------------------------------------
+	ATSSStoreShell* Shell = nullptr;
+	for (TActorIterator<ATSSStoreShell> It(GetWorld()); It; ++It) Shell = *It;
+	Check(TEXT("the shop has a StoreShell building it"), Shell != nullptr);
+	Check(TEXT("the store starts at its smallest size"), Biz->GetStoreStage() == 0 && Shell && Shell->GetStage() == 0);
+	Check(TEXT("the shop starts with only two shelves (plus the one just bought)"), CountShelves() == 3);
+	Check(TEXT("a shelf that needs a bigger store is refused until you expand"), !Biz->BuyUpgrade(TEXT("shelf_2"), Why) && Why.Contains(TEXT("bigger store")));
+	const float DeskX0 = Comp->GetActorLocation().X;
+	const float ShelfY0 = NewShelf->GetActorLocation().Y;
+	M0 = Store->GetMoney();
+	const bool bCanExpand = Biz->GetLevel() >= 2;
+	Check(TEXT("the first store expansion follows the level rule"), Biz->BuyUpgrade(TEXT("store_1"), Why) == bCanExpand);
+	if (bCanExpand)
+	{
+		Check(TEXT("expanding charges its price and advances the store size"), Store->GetMoney() == M0 - 1200 && Biz->GetStoreStage() == 1 && Shell->GetStage() == 1);
+		Check(TEXT("the back wall moves out and the desk moves with it"), FMath::IsNearlyEqual(Comp->GetActorLocation().X, DeskX0 + TSSStoreLayout::BackX(1) - TSSStoreLayout::BackX(0), 1.f));
+		Check(TEXT("a right-wall shelf moves with the right wall"), FMath::IsNearlyEqual(NewShelf->GetActorLocation().Y, ShelfY0 + TSSStoreLayout::HalfWidth(1) - TSSStoreLayout::HalfWidth(0), 1.f));
+		const int32 ShelvesBefore = CountShelves();
+		Check(TEXT("the bigger store unlocks more shelf spots"), Biz->BuyUpgrade(TEXT("shelf_2"), Why) && CountShelves() == ShelvesBefore + 1);
+	}
 	if (!NewShelf) { Finish(); return; }
 
 	// ---- ordering ---------------------------------------------------------------------------------------
@@ -646,12 +670,17 @@ void ATSSPlayerController::TSSDeskTest()
 				&& TSSDeskPages()[4]->Badge(1) == TEXT("LOCKED") && TSSDeskPages()[0]->RequiredLevel() == 0);
 			Check(TEXT("a section stays marked once its level is reached but it is not built"), TSSDeskPages()[4]->Badge(TSSDeskPages()[4]->RequiredLevel()) == TEXT("NOT YET"));
 			// Screenshots of the interface and the computer.
+			ConsoleCommand(TEXT("TSSLook 640 0 90 180 -3")); // overview of the shop (expanded, if the test could afford it)
+			Snap();
+			St->Hold = 1.6f; St->Step = 11; St->Elapsed = 0.f;
+			break;
+		}
+		case 11:
 			GetDesk()->SetDark(true);
 			TSSDeskPage(0);
 			Snap();
 			St->Hold = 1.6f; St->Step = 2; St->Elapsed = 0.f;
 			break;
-		}
 		case 2:
 			Check(TEXT("the dark-mode pill switches the theme"), TSSDeskDark() && TSSDeskTheme().PageBg.R < 0.2f);
 			GetDesk()->GetContext().Cart.Add(ETSSProduct::Laptop, 2);

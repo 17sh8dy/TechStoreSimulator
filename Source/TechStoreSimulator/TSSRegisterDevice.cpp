@@ -287,14 +287,15 @@ void ATSSCardTerminal::BeginPlay()
 	if (UTSSTerminalWidget* W = Cast<UTSSTerminalWidget>(Screen->GetUserWidgetObject())) W->SetRegister(GetRegister());
 }
 
+FVector ATSSCardTerminal::GetTapPoint() const
+{
+	return GetActorTransform().TransformPosition(CardTo + FVector(0.f, 0.f, 3.f));
+}
+
 void ATSSCardTerminal::Tick(float Dt)
 {
 	Super::Tick(Dt);
-	const float Target = bCardWanted ? 1.f : 0.f;
-	if (FMath::IsNearlyEqual(CardAlpha, Target)) return;
-	CardAlpha = FMath::FInterpConstantTo(CardAlpha, Target, Dt, 1.4f);
-	Card->SetVisibility(CardAlpha > 0.01f);
-	Card->SetRelativeLocation(FMath::Lerp(CardFrom, CardTo, FMath::InterpEaseOut(0.f, 1.f, CardAlpha, 2.f)));
+	// The customer's own hand brings the card to the terminal now; the old flying-card animation is retired.
 }
 
 FString ATSSCardTerminal::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const

@@ -125,6 +125,8 @@ public:
 
 	/** The customer's card flies in to tap the terminal / is taken away again. */
 	void SetCardPresent(bool bPresent) { bCardWanted = bPresent; }
+	/** World position the customer taps their card on. */
+	FVector GetTapPoint() const;
 
 private:
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Card;

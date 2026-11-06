@@ -1,6 +1,7 @@
 #include "TSSDeskPages.h"
 #include "TSSBusinessSubsystem.h"
 #include "TSSShelf.h"
+#include "TSSStoreLayout.h"
 #include "TSSStoreSubsystem.h"
 #include "EngineUtils.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
@@ -309,6 +310,7 @@ public:
 			const FTSSProductDef& Def = TSSProductDef(P);
 			const int32 Qty = C.Cart.FindRef(P);
 			const bool bSel = C.Selected == P;
+			const bool bProductLocked = Def.MinLevel > C.Biz->GetLevel();
 			Catalog->AddSlot().AutoHeight().Padding(0.f, 2.f)
 			[
 				SNew(SHorizontalBox)
@@ -323,7 +325,7 @@ public:
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.f)[ SNew(SBox).MinDesiredWidth(118.f)[ DskTxt(Def.Name, 16, true) ] ]
 						+ SHorizontalBox::Slot().AutoWidth().Padding(10.f, 0.f)[ DskTxt(DskMoney(Def.WholesaleCost), 15, true) ]
-						+ SHorizontalBox::Slot().AutoWidth()[ DskTxt(FString::Printf(TEXT("stock %d"), DskUnitsOnShelves(C.World, P)), 14, false, Th().Dim) ]
+						+ SHorizontalBox::Slot().AutoWidth()[ DskTxt(bProductLocked ? FString::Printf(TEXT("LOCKED lvl %d"), Def.MinLevel) : FString::Printf(TEXT("stock %d"), DskUnitsOnShelves(C.World, P)), 14, bProductLocked, bProductLocked ? Th().Bad : Th().Dim) ]
 					]
 				]
 				+ SHorizontalBox::Slot().AutoWidth()[ DskButton(TEXT("-"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Max(0, Q - 1); Ctx->Refresh(); }, Qty > 0) ]
@@ -331,8 +333,8 @@ public:
 				[
 					SNew(SBox).MinDesiredWidth(26.f)[ DskTxt(FString::FromInt(Qty), 17, true, Qty > 0 ? Th().Heading : Th().Dim) ]
 				]
-				+ SHorizontalBox::Slot().AutoWidth()[ DskButton(TEXT("+"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Min(50, Q + 1); Ctx->Refresh(); }) ]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f)[ DskButton(TEXT("+5"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Min(50, Q + 5); Ctx->Refresh(); }) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ DskButton(TEXT("+"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Min(50, Q + 1); Ctx->Refresh(); }, !bProductLocked) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 0.f, 0.f)[ DskButton(TEXT("+5"), [Ctx, P]() { int32& Q = Ctx->Cart.FindOrAdd(P); Q = FMath::Min(50, Q + 5); Ctx->Refresh(); }, !bProductLocked) ]
 			];
 		}
 
@@ -347,7 +349,10 @@ public:
 			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Profit per unit (before tax)"), DskMoney(ShelfPrice - Sel.WholesaleCost), true, ShelfPrice >= Sel.WholesaleCost ? Th().Good : Th().Bad) ]
 			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("On your shelves now"), FString::FromInt(DskUnitsOnShelves(C.World, C.Selected))) ]
 			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Box size (cm)"), FString::Printf(TEXT("%d x %d x %d"), FMath::RoundToInt(Sel.BoxSize.X), FMath::RoundToInt(Sel.BoxSize.Y), FMath::RoundToInt(Sel.BoxSize.Z))) ]
-			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Fits per shelf slot"), FString::FromInt(Sel.SlotCapacity())) ]);
+			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Fits per shelf slot"), FString::FromInt(Sel.SlotCapacity())) ]
+			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Category"), Sel.Category) ]
+			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Brand"), Sel.Brand) ]
+			+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Unlocks at business level"), FString::FromInt(Sel.MinLevel), Sel.MinLevel > 1, Sel.MinLevel > C.Biz->GetLevel() ? Th().Bad : Th().Ink) ]);
 
 		// Cart summary.
 		TArray<FTSSOrderLine> Lines;
@@ -472,7 +477,7 @@ public:
 			FString Why;
 			const bool bCan = C.Biz->CanBuyUpgrade(Def, Why);
 			const FName Id(Def.Id);
-			FString Status = bOwned ? TEXT("OWNED") : (!Def.bImplemented ? FString::Printf(TEXT("LOCKED  -  level %d"), Def.MinLevel) : FString::Printf(TEXT("%s  -  level %d"), *DskMoney(Def.Cost), Def.MinLevel));
+			FString Status = bOwned ? TEXT("OWNED") : (!Def.bImplemented ? FString::Printf(TEXT("LOCKED  -  level %d"), Def.MinLevel) : (C.Biz->GetStoreStage() < Def.MinStage) ? FString::Printf(TEXT("NEEDS %s"), TSSStoreLayout::StageName(Def.MinStage)) : FString::Printf(TEXT("%s  -  level %d"), *DskMoney(Def.Cost), Def.MinLevel));
 			List->AddSlot().AutoHeight().Padding(0.f, 3.f)
 			[
 				DskPanel(SNew(SHorizontalBox)
@@ -504,6 +509,7 @@ public:
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)
 				[
 					DskPanel(SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Store size"), FString::Printf(TEXT("%s  (%d x %d m)"), TSSStoreLayout::StageName(C.Biz->GetStoreStage()), FMath::RoundToInt(TSSStoreLayout::Length(C.Biz->GetStoreStage()) / 100.f), FMath::RoundToInt(TSSStoreLayout::HalfWidth(C.Biz->GetStoreStage()) / 50.f)), true) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Shelf units"), FString::FromInt(Shelves)) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Shelf slots in use"), FString::Printf(TEXT("%d / %d"), UsedSlots, Slots)) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Products on shelves"), FString::FromInt(Units)) ])

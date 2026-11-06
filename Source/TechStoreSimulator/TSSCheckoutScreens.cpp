@@ -42,7 +42,8 @@ FText UTSSMonitorWidget::StatusText() const
 	case ETSSCheckoutPhase::Scanning: return FText::FromString(TEXT("SCANNING"));
 	case ETSSCheckoutPhase::WaitingForPayment: return FText::FromString(TEXT("AWAITING PAYMENT"));
 	case ETSSCheckoutPhase::CashDue: return FText::FromString(TEXT("CASH PAYMENT"));
-	case ETSSCheckoutPhase::Receipt: return FText::FromString(TEXT("COMPLETE"));
+	case ETSSCheckoutPhase::Receipt:
+	case ETSSCheckoutPhase::Collecting: return FText::FromString(TEXT("COMPLETE"));
 	default: return FText::FromString(TEXT("CARD PAYMENT"));
 	}
 }

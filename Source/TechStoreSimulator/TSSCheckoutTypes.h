@@ -19,6 +19,7 @@ enum class ETSSCheckoutPhase : uint8
 	CardProcessing,
 	CardResult,         // approved / declined on the terminal screen
 	Receipt,            // receipt is printed: hand it over
+	Collecting,         // the customer is taking their shopping off the counter
 };
 
 /** What a customer is buying: product and the shelf price they agreed to. */
