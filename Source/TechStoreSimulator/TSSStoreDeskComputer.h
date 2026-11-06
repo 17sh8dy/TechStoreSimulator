@@ -24,6 +24,8 @@ public:
 
 	virtual FString GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const override;
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) override;
+	virtual bool IsMovable() const override { return true; }
+	virtual FString GetMoveName() const override { return TEXT("StoreDesk computer"); }
 
 private:
 	UStaticMeshComponent* Box(const TCHAR* Name, FVector Loc, FVector Size, FLinearColor Color, FRotator Rot = FRotator::ZeroRotator, bool bCollide = true);

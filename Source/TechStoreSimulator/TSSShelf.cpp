@@ -312,3 +312,13 @@ FVector ATSSShelf::GetSlotWorldPos(int32 Slot) const
 {
 	return GetActorTransform().TransformPosition(SlotOrigin(Slot));
 }
+
+FName ATSSShelf::LayoutKey() const
+{
+	// Shelves bought as upgrades are spawned fresh each session, so they are identified by their upgrade name.
+	for (const FName& T : Tags)
+	{
+		if (T.ToString().StartsWith(TEXT("shelf_"))) return T;
+	}
+	return GetFName();
+}

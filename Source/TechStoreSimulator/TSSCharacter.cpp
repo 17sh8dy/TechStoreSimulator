@@ -2,6 +2,7 @@
 #include "TSSPlayerController.h"
 #include "TSSSettings.h"
 #include "TSSInteractable.h"
+#include "TSSMover.h"
 #include "TSSHumanComponent.h"
 #include "TSSProductBox.h"
 #include "Camera/CameraComponent.h"
@@ -41,6 +42,8 @@ ATSSCharacter::ATSSCharacter()
 	HeldMesh->SetupAttachment(GetCapsuleComponent());
 	HeldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HeldMesh->SetVisibility(false, true);
+
+	Mover = CreateDefaultSubobject<UTSSMoverComponent>(TEXT("Mover"));
 }
 
 void ATSSCharacter::BeginPlay()
@@ -104,6 +107,16 @@ void ATSSCharacter::SetHeld(ETSSProduct Product)
 	HeldMesh->SetVisibility(true, true);
 }
 
+void ATSSCharacter::InteractWith(ATSSInteractable* Target, const FHitResult& Hit)
+{
+	if (!Target) return;
+	Target->Interact(this, Hit);
+	// A quick reach toward what you pressed it on (visible in third person).
+	Human->Reach(ETSSHand::Right, Hit.ImpactPoint, 0.16f);
+	Human->LookAt(Hit.ImpactPoint);
+	GestureTimer = 0.55f;
+}
+
 void ATSSCharacter::UpdateFocus(ATSSPlayerController* PC)
 {
 	Focus = nullptr;
@@ -139,16 +152,14 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 	GetCharacterMovement()->MaxWalkSpeed = SpeedFor(PC->IsInputKeyDown(SprintKey));   // hold the sprint key (Shift by default) to hurry
 	Human->SetSpeed(GetVelocity().Size2D());
 	UpdateFocus(PC);
-	if (Focus)
+	// Hold E on a shelf or the StoreDesk computer to pick it up and move it (a quick tap still does its normal action).
+	const bool bMoving = Mover->Update(PC, this, Focus, FocusHit, DeltaSeconds);
+	const FString MoverPrompt = Mover->GetPrompt();
+	if (!MoverPrompt.IsEmpty()) FocusPrompt = MoverPrompt;
+	else if (Focus && Focus->IsMovable() && !FocusPrompt.IsEmpty()) FocusPrompt += TEXT("\n(hold E for 2 seconds to move it)");
+	if (Focus && !bMoving)
 	{
-		if (PC->WasInputKeyJustPressed(EKeys::E))
-		{
-			Focus->Interact(this, FocusHit);
-			// A quick reach toward what you pressed it on (visible in third person).
-			Human->Reach(ETSSHand::Right, FocusHit.ImpactPoint, 0.16f);
-			Human->LookAt(FocusHit.ImpactPoint);
-			GestureTimer = 0.55f;
-		}
+		if (!Focus->IsMovable() && PC->WasInputKeyJustPressed(EKeys::E)) InteractWith(Focus, FocusHit);
 		if (PC->WasInputKeyJustPressed(EKeys::MouseScrollUp) || PC->WasInputKeyJustPressed(EKeys::RightBracket)) Focus->Adjust(this, FocusHit, +1);
 		if (PC->WasInputKeyJustPressed(EKeys::MouseScrollDown) || PC->WasInputKeyJustPressed(EKeys::LeftBracket)) Focus->Adjust(this, FocusHit, -1);
 	}

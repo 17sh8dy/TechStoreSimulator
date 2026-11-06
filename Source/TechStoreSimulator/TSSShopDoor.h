@@ -39,11 +39,13 @@ public:
 	/** The player's wish: true once they have opened it (staying open until they close it). */
 	bool IsHeldOpen() const { return bHeldOpen; }
 	/** True while the door is actually swung open, for whatever reason. */
-	bool IsOpenNow() const { return CurrentAngle < -45.f; }
-	/** Where the leaf is: 0 closed, -OpenAngle fully open. */
+	bool IsOpenNow() const { return FMath::Abs(CurrentAngle) > 45.f; }
+	/** Where the leaf is: 0 closed; positive = swung into the shop, negative = swung out onto the street. */
 	float GetAngle() const { return CurrentAngle; }
-	/** The widest the door has been swung since the last call (negative degrees); resets the record. For tests. */
-	float ConsumePeakAngle() { const float P = PeakAngle; PeakAngle = CurrentAngle; return P; }
+	/** +1 if the door last opened (or will open) into the shop, -1 if outward. */
+	int32 GetSwingDir() const { return SwingDir; }
+	/** The widest the door has swung (degrees, always positive) since the last call; resets the record. For tests. */
+	float ConsumePeakSwing() { const float P = PeakSwing; PeakSwing = FMath::Abs(CurrentAngle); return P; }
 	/** True if anything (customer, courier) is making the door open right now. */
 	bool IsBeingUsed() const { return bSomeoneNear; }
 
@@ -54,13 +56,14 @@ public:
 	/** Rings the bell now: sound plus the little bell swinging (public so tests and dev tools can trigger it). */
 	void RingBell();
 
-	static constexpr float OpenAngle = -100.f;
 
 private:
 	UStaticMeshComponent* Part(const TCHAR* Name, USceneComponent* Parent, FVector Loc, FVector Size, FLinearColor Color, bool bCollide = false, bool bCylinder = false);
 	void RefreshSign(bool bOpen);
 	bool PlayerInDoorway() const;
-	bool NpcNearDoor() const;
+	bool NpcNearDoor(int32& OutDir) const;
+	int32 DirectionAwayFrom(const FVector& World) const;
+	bool PlayerInSwingZone() const;
 	void WatchCrossings();
 
 	UPROPERTY() TObjectPtr<USceneComponent> Hinge;
@@ -76,7 +79,8 @@ private:
 	TArray<FLinearColor> PartColors;
 
 	float CurrentAngle = 0.f;
-	float PeakAngle = 0.f;
+	float PeakSwing = 0.f;
+	int32 SwingDir = -1;   // +1 swings into the shop, -1 out onto the street
 	bool bHeldOpen = false;
 	bool bSomeoneNear = false;
 	int32 ShownSign = -1;   // -1 unknown, 0 closed, 1 open

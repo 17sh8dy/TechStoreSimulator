@@ -4,6 +4,11 @@
 #include "TSSHumanComponent.h"
 #include "TSSRegister.h"
 #include "TSSRoad.h"
+#include "TSSCustomer.h"
+#include "TSSShopDoor.h"
+#include "TSSStoreLayout.h"
+#include "TSSStoreShell.h"
+#include "Algo/Sort.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -113,6 +118,118 @@ void ATSSParcel::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 	if (UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz->OnUnitUnloaded(OrderId);
 	if (Qty <= 0) Destroy();
 	else UpdateLabel();
+}
+
+// ---- parcel stacking ------------------------------------------------------------------------------------
+
+namespace
+{
+	constexpr float DlvCellX = 55.f;      // cell spacing away from the front wall
+	constexpr float DlvCellY = 65.f;      // cell spacing along the side wall
+	constexpr float DlvHalfX = 28.f, DlvHalfY = 33.f;   // a parcel is 50 x 60 cm (plus a little air)
+
+	/** Is a parcel-sized spot at (X, Y) taken by furniture? */
+	bool DlvBlocked(UWorld* World, float X, float Y)
+	{
+		for (TActorIterator<ATSSInteractable> It(World); It; ++It)
+		{
+			const ATSSInteractable* A = *It;
+			if (Cast<ATSSParcel>(A) || Cast<ATSSCustomer>(A) || Cast<ATSSShopDoor>(A)) continue;
+			FVector C, E;
+			A->GetActorBounds(false, C, E);
+			if (E.X < 1.f && E.Y < 1.f) continue;
+			if (X - DlvHalfX < C.X + E.X && X + DlvHalfX > C.X - E.X && Y - DlvHalfY < C.Y + E.Y && Y + DlvHalfY > C.Y - E.Y) return true;
+		}
+		return false;
+	}
+
+	/** Usable stack positions, nearest the dock corner first. */
+	TArray<FVector2D> DlvCells(UWorld* World)
+	{
+		const FVector Drop = ATSSDeliveryDock::Resolve(World).Drop;
+		int32 Stage = 0;
+		for (TActorIterator<ATSSStoreShell> It(World); It; ++It) { Stage = It->GetStage(); break; }
+		const float Back = TSSStoreLayout::BackX(Stage), Half = TSSStoreLayout::HalfWidth(Stage);
+
+		TArray<FVector2D> Cells;
+		for (int32 Sum = 0; Sum < 9; ++Sum)
+		{
+			for (int32 R = 0; R <= Sum; ++R)
+			{
+				const int32 C = Sum - R;
+				const float X = Drop.X - DlvCellX * R;
+				const float Y = Drop.Y - DlvCellY * C;
+				if (X - DlvHalfX < Back + 5.f || X + DlvHalfX > TSSStoreLayout::FrontX - 5.f) continue;
+				if (Y - DlvHalfY < -Half + 5.f || Y + DlvHalfY > Half - 5.f) continue;
+				if (X > 330.f && FMath::Abs(Y) < 95.f) continue;   // the walkway from the door
+				if (DlvBlocked(World, X, Y)) continue;
+				Cells.Add(FVector2D(X, Y));
+			}
+		}
+		return Cells;
+	}
+}
+
+FVector ATSSParcel::NextStackSlot(UWorld* World)
+{
+	const FVector Drop = ATSSDeliveryDock::Resolve(World).Drop;
+	const TArray<FVector2D> Cells = DlvCells(World);
+	if (Cells.Num() == 0) return FVector(Drop.X, Drop.Y, 20.f);
+
+	TArray<int32> Height;
+	Height.Init(0, Cells.Num());
+	for (TActorIterator<ATSSParcel> It(World); It; ++It)
+	{
+		const FVector L = It->GetActorLocation();
+		for (int32 i = 0; i < Cells.Num(); ++i)
+		{
+			if (FMath::Abs(L.X - Cells[i].X) < 20.f && FMath::Abs(L.Y - Cells[i].Y) < 20.f) { ++Height[i]; break; }
+		}
+	}
+	// Fill one layer across the nearest cells before starting the next layer up.
+	for (int32 Level = 0; Level < MaxStack; ++Level)
+	{
+		for (int32 i = 0; i < Cells.Num(); ++i)
+		{
+			if (Height[i] == Level) return FVector(Cells[i].X, Cells[i].Y, StackStep * 0.5f + StackStep * Level);
+		}
+	}
+	return FVector(Cells[0].X, Cells[0].Y, StackStep * 0.5f + StackStep * Height[0]);   // absolutely full: keep going up
+}
+
+void ATSSParcel::SettleStacks(UWorld* World)
+{
+	TMap<FIntPoint, TArray<ATSSParcel*>> Columns;
+	for (TActorIterator<ATSSParcel> It(World); It; ++It)
+	{
+		const FVector L = It->GetActorLocation();
+		Columns.FindOrAdd(FIntPoint(FMath::RoundToInt(L.X / 4.f), FMath::RoundToInt(L.Y / 4.f))).Add(*It);
+	}
+	for (TPair<FIntPoint, TArray<ATSSParcel*>>& KV : Columns)
+	{
+		TArray<ATSSParcel*>& Stack = KV.Value;
+		Algo::Sort(Stack, [](const ATSSParcel* A, const ATSSParcel* B) { return A->GetActorLocation().Z < B->GetActorLocation().Z; });
+		for (int32 i = 0; i < Stack.Num(); ++i)
+		{
+			FVector L = Stack[i]->GetActorLocation();
+			L.Z = StackStep * 0.5f + StackStep * i;
+			Stack[i]->SetActorLocation(L);
+		}
+	}
+}
+
+void ATSSParcel::EndPlay(const EEndPlayReason::Type Reason)
+{
+	// An unpacked parcel leaves a gap: let the ones above it drop down once this one is really gone.
+	if (Reason == EEndPlayReason::Destroyed)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			TWeakObjectPtr<UWorld> Weak(World);
+			World->GetTimerManager().SetTimerForNextTick([Weak]() { if (Weak.IsValid()) ATSSParcel::SettleStacks(Weak.Get()); });
+		}
+	}
+	Super::EndPlay(Reason);
 }
 
 // ---- truck ----------------------------------------------------------------------------------------
@@ -253,7 +370,7 @@ void ATSSDeliveryTruck::DropParcels()
 	{
 		FActorSpawnParameters P;
 		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		const FVector At = Dock.Drop + FVector(0.f, 70.f * (Slot - (Order.Lines.Num() - 1) * 0.5f), 20.f);
+		const FVector At = ATSSParcel::NextStackSlot(GetWorld());   // stacked in the corner, never spread over the floor
 		if (ATSSParcel* Parcel = GetWorld()->SpawnActor<ATSSParcel>(ATSSParcel::StaticClass(), FTransform(At), P))
 		{
 			Parcel->Init(Order.Id, L.Product, L.Qty);

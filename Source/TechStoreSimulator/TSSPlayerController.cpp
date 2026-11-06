@@ -9,6 +9,7 @@
 #include "TSSRoad.h"
 #include "TSSDayNight.h"
 #include "TSSStreetBuilding.h"
+#include "TSSMover.h"
 #include "TSSShelf.h"
 #include "TSSStoreSubsystem.h"
 #include "TSSCustomer.h"
@@ -355,6 +356,188 @@ void ATSSPlayerController::TSSSelfTest()
 			&& UTSSBusinessSubsystem::DayForSeconds(UTSSBusinessSubsystem::DayLengthSeconds * 16.f / 24.f + 1.f) == 2);
 	}
 
+	// ---- the door swings away from whoever opens it ----
+	{
+		const FVector Home = Me->GetActorLocation();
+		Me->SetActorLocation(FVector(800.f, 0.f, Home.Z));
+		Door->Interact(Me, FHitResult());
+		Check(TEXT("opened from outside, the door swings INTO the shop"), Door->GetSwingDir() > 0);
+		Door->Interact(Me, FHitResult());
+		Me->SetActorLocation(FVector(600.f, 150.f, Home.Z));
+		Door->Interact(Me, FHitResult());
+		Check(TEXT("opened from inside, the door swings OUT onto the street"), Door->GetSwingDir() < 0);
+		Door->Interact(Me, FHitResult());
+		Me->SetActorLocation(Home);
+	}
+
+	// ---- pick up and move furniture: hold E for 2 seconds ----
+	UTSSBusinessSubsystem* LayoutBiz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>();
+	if (UTSSMoverComponent* Mv = Me->GetMover())
+	{
+		FHitResult H0;
+		const int32 Taps0 = Mv->GetTapCount();
+		Mv->HoldStep(Me, Shelf, H0, 0.02f, true, true);
+		Mv->HoldStep(Me, Shelf, H0, 0.02f, false, false);
+		Check(TEXT("a quick tap on a shelf is still a normal press, not a move"), Mv->GetTapCount() == Taps0 + 1 && !Mv->IsMoving());
+
+		Mv->HoldStep(Me, Shelf, H0, 0.02f, true, true);
+		for (int32 i = 0; i < 90; ++i) Mv->HoldStep(Me, Shelf, H0, 0.02f, true, false);   // about 1.8 s
+		Check(TEXT("holding E for less than 2 seconds does not pick it up"), !Mv->IsMoving() && Mv->GetHoldFraction() > 0.8f);
+		for (int32 i = 0; i < 12; ++i) Mv->HoldStep(Me, Shelf, H0, 0.02f, true, false);   // past 2 s
+		Check(TEXT("holding E for 2 seconds picks the shelf up"), Mv->IsMoving() && Mv->GetMoving() == Shelf);
+
+		const FVector S0 = Shelf->GetActorLocation();
+		const FRotator R0 = Shelf->GetActorRotation();
+		TArray<UStaticMeshComponent*> Parts;
+		Shelf->GetComponents<UStaticMeshComponent>(Parts);
+		TArray<FVector> Before;
+		for (UStaticMeshComponent* C : Parts) Before.Add(C->GetComponentLocation());
+		int32 StockedBoxes = 0;
+		for (int32 s = 0; s < ATSSShelf::Tiers * ATSSShelf::Columns; ++s) StockedBoxes += Shelf->GetSlotQty(s);
+
+		// Somewhere free in the shop.
+		bool bFound = false;
+		FVector Free = S0;
+		for (float X = 120.f; X <= 560.f && !bFound; X += 20.f)
+		{
+			for (float Y = -220.f; Y <= 220.f && !bFound; Y += 20.f)
+			{
+				Mv->SetPlacement(FVector(X, Y, 0.f), R0.Yaw);
+				if (Mv->IsPlacementValid()) { bFound = true; Free = FVector(X, Y, S0.Z); }
+			}
+		}
+		Check(TEXT("there is a free spot to put the shelf, and the game accepts it"), bFound);
+
+		const FVector Delta = Shelf->GetActorLocation() - S0;
+		bool bAllMoved = Parts.Num() > 5;
+		for (int32 i = 0; i < Parts.Num(); ++i) bAllMoved &= (Parts[i]->GetComponentLocation() - Before[i] - Delta).Size() < 0.5f;
+		Check(TEXT("the whole shelf comes along: frame, price tags and every stocked box"), bAllMoved && StockedBoxes > 0);
+
+		Mv->SetPlacement(FVector(5000.f, 0.f, 0.f), R0.Yaw);
+		Check(TEXT("it cannot be put outside the shop"), !Mv->IsPlacementValid());
+		Check(TEXT("and putting it down there is refused"), !Mv->Commit() && Mv->IsMoving());
+		Mv->SetPlacement(FVector(600.f, 0.f, 0.f), R0.Yaw);
+		Check(TEXT("it cannot block the doorway or the path in from the door"), !Mv->IsPlacementValid());
+		ATSSShelf* OtherShelf = nullptr;
+		for (TActorIterator<ATSSShelf> It(GetWorld()); It; ++It) if (*It != Shelf) { OtherShelf = *It; break; }
+		if (OtherShelf)
+		{
+			Mv->SetPlacement(OtherShelf->GetActorLocation(), R0.Yaw);
+			Check(TEXT("it cannot be put on top of another shelf"), !Mv->IsPlacementValid());
+		}
+		Mv->SetPlacement(Free, 90.f);
+		Check(TEXT("it can be rotated"), FMath::IsNearlyEqual(FMath::Abs(Shelf->GetActorRotation().Yaw), 90.f, 0.5f));
+		Mv->SetPlacement(Free, R0.Yaw);
+		Check(TEXT("Q puts it back where it was"), [&]() { Mv->Cancel(); return !Mv->IsMoving() && (Shelf->GetActorLocation() - S0).Size() < 0.5f; }());
+
+		// Move it for real, and check the layout is remembered.
+		Mv->BeginMove(Me, Shelf);
+		Mv->SetPlacement(Free, R0.Yaw);
+		const bool bCommitted = Mv->Commit();
+		Check(TEXT("E puts the shelf down in its new place"), bCommitted && !Mv->IsMoving() && (Shelf->GetActorLocation() - Free).Size() < 0.5f);
+		Check(TEXT("the new layout is remembered for the save"), LayoutBiz && LayoutBiz->GetMovedCount() >= 1);
+		Shelf->SetActorLocation(S0);
+		if (LayoutBiz) LayoutBiz->ApplyLayout();
+		Check(TEXT("loading a game puts the shelf back where the owner left it"), (Shelf->GetActorLocation() - Free).Size() < 0.5f);
+		Mv->BeginMove(Me, Shelf);
+		Mv->SetPlacement(S0, R0.Yaw);
+		Mv->Commit();   // put it back for the tests that follow
+
+		// The StoreDesk computer, with its keyboard and mouse.
+		ATSSStoreDeskComputer* DeskPc = nullptr;
+		for (TActorIterator<ATSSStoreDeskComputer> It(GetWorld()); It; ++It) { DeskPc = *It; break; }
+		if (DeskPc)
+		{
+			const FVector D0 = DeskPc->GetActorLocation();
+			const FRotator DR0 = DeskPc->GetActorRotation();
+			const TArray<FName> DeskTags0 = DeskPc->Tags;
+			TArray<UStaticMeshComponent*> DParts;
+			DeskPc->GetComponents<UStaticMeshComponent>(DParts);
+			TArray<FVector> DBefore;
+			for (UStaticMeshComponent* C : DParts) DBefore.Add(C->GetComponentLocation());
+			Mv->BeginMove(Me, DeskPc);
+			bool bDeskFound = false;
+			FVector DFree = D0;
+			for (float X = 120.f; X <= 560.f && !bDeskFound; X += 20.f)
+			{
+				for (float Y = -220.f; Y <= 220.f && !bDeskFound; Y += 20.f)
+				{
+					Mv->SetPlacement(FVector(X, Y, 0.f), DR0.Yaw);
+					if (Mv->IsPlacementValid()) { bDeskFound = true; DFree = FVector(X, Y, D0.Z); }
+				}
+			}
+			const FVector DDelta = DeskPc->GetActorLocation() - D0;
+			bool bDeskAll = DParts.Num() > 4;
+			for (int32 i = 0; i < DParts.Num(); ++i) bDeskAll &= (DParts[i]->GetComponentLocation() - DBefore[i] - DDelta).Size() < 0.5f;
+			Check(TEXT("the StoreDesk computer moves with its monitor, tower, keyboard and mouse"), bDeskFound && bDeskAll);
+			Check(TEXT("and can be put down"), Mv->Commit());
+			Mv->BeginMove(Me, DeskPc);
+			Mv->SetPlacement(D0, DR0.Yaw);
+			Mv->Commit();
+			DeskPc->Tags = DeskTags0;   // a test move must not change which wall the desk is anchored to
+		}
+	}
+
+	// ---- a big delivery stacks in the corner instead of covering the floor ----
+	{
+		TArray<ATSSParcel*> Pile;
+		for (int32 i = 0; i < 40; ++i)
+		{
+			const FVector At = ATSSParcel::NextStackSlot(GetWorld());
+			FActorSpawnParameters P;
+			P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			if (ATSSParcel* Parcel = GetWorld()->SpawnActor<ATSSParcel>(ATSSParcel::StaticClass(), FTransform(At), P))
+			{
+				Parcel->Init(-5, ETSSProduct::Phone, 1);
+				Pile.Add(Parcel);
+			}
+		}
+		Check(TEXT("40 parcels all fit"), Pile.Num() == 40);
+		int32 Stage = 0;
+		for (TActorIterator<ATSSStoreShell> It(GetWorld()); It; ++It) { Stage = It->GetStage(); break; }
+		bool bInside = true, bClear = true, bNoOverlap = true, bNoFloaters = true;
+		float MaxZ = 0.f;
+		int32 OnFloor = 0;
+		for (int32 i = 0; i < Pile.Num(); ++i)
+		{
+			const FVector L = Pile[i]->GetActorLocation();
+			MaxZ = FMath::Max(MaxZ, L.Z);
+			if (FMath::IsNearlyEqual(L.Z, 20.f, 1.f)) ++OnFloor;
+			bInside &= L.X > TSSStoreLayout::BackX(Stage) && L.X < TSSStoreLayout::FrontX && FMath::Abs(L.Y) < TSSStoreLayout::HalfWidth(Stage);
+			bClear &= !(L.X > 330.f && FMath::Abs(L.Y) < 95.f);
+			bool bBelow = FMath::IsNearlyEqual(L.Z, 20.f, 1.f);
+			for (int32 j = 0; j < Pile.Num(); ++j)
+			{
+				if (i == j) continue;
+				const FVector M = Pile[j]->GetActorLocation();
+				const bool bSameColumn = FMath::Abs(L.X - M.X) < 4.f && FMath::Abs(L.Y - M.Y) < 4.f;
+				if (bSameColumn && FMath::Abs(L.Z - M.Z) < 4.f) bNoOverlap = false;
+				if (bSameColumn && FMath::IsNearlyEqual(M.Z, L.Z - 40.f, 1.f)) bBelow = true;
+			}
+			bNoFloaters &= bBelow;
+		}
+		Check(TEXT("the pile stays inside the shop and off the walkway from the door"), bInside && bClear);
+		Check(TEXT("no two parcels are in the same place and none floats in the air"), bNoOverlap && bNoFloaters);
+		Check(TEXT("it is stacked, not spread out: only a few on the floor, and under the ceiling"), OnFloor < 40 && OnFloor >= 3 && MaxZ <= 20.f + 40.f * 6.f + 1.f);
+		// Unpack one from the middle of a stack: the ones above must drop down.
+		ATSSParcel* Middle = nullptr;
+		for (ATSSParcel* Pcl : Pile) if (FMath::IsNearlyEqual(Pcl->GetActorLocation().Z, 60.f, 1.f)) { Middle = Pcl; break; }
+		if (Middle)
+		{
+			const FVector Col = Middle->GetActorLocation();
+			Pile.Remove(Middle);
+			Middle->Destroy();
+			ATSSParcel::SettleStacks(GetWorld());
+			bool bContiguous = true;
+			TArray<float> Zs;
+			for (ATSSParcel* Pcl : Pile) { const FVector L = Pcl->GetActorLocation(); if (FMath::Abs(L.X - Col.X) < 4.f && FMath::Abs(L.Y - Col.Y) < 4.f) Zs.Add(L.Z); }
+			Zs.Sort();
+			for (int32 i = 0; i < Zs.Num(); ++i) bContiguous &= FMath::IsNearlyEqual(Zs[i], 20.f + 40.f * i, 1.f);
+			Check(TEXT("when a parcel is unpacked from a stack the ones above drop down"), bContiguous);
+		}
+		for (ATSSParcel* Pcl : Pile) if (Pcl) Pcl->Destroy();
+	}
+
 	// ---- sprint ----
 	if (UGameInstance* GI = GetGameInstance())
 	{
@@ -472,7 +655,7 @@ void ATSSPlayerController::TSSCustomerTest()
 
 	ATSSShopDoor* ShopDoor = nullptr;
 	for (TActorIterator<ATSSShopDoor> DIt(GetWorld()); DIt; ++DIt) { ShopDoor = *DIt; break; }
-	if (ShopDoor) { ShopDoor->ConsumePeakAngle(); St->Rings0 = ShopDoor->GetRingCount(); }
+	if (ShopDoor) { ShopDoor->ConsumePeakSwing(); St->Rings0 = ShopDoor->GetRingCount(); }
 
 	Spawn(ETSSPayMethod::Cash);
 	Check(TEXT("a customer spawns at the door"), St->Customer.IsValid());
@@ -496,9 +679,10 @@ void ATSSPlayerController::TSSCustomerTest()
 				{
 					if (ShopDoor && bCash)
 					{
-						Check(TEXT("the door swung open for the customer walking in"), ShopDoor->ConsumePeakAngle() < -30.f);
+						Check(TEXT("the door swung open for the customer walking in"), ShopDoor->ConsumePeakSwing() > 30.f);
+						Check(TEXT("it swung INTO the shop, away from the customer outside"), ShopDoor->GetSwingDir() > 0);
 						Check(TEXT("the bell rang as the customer walked in"), ShopDoor->GetRingCount() > St->Rings0);
-						Check(TEXT("and shut again behind them"), ShopDoor->GetAngle() > -5.f && !ShopDoor->IsHeldOpen());
+						Check(TEXT("and shut again behind them"), FMath::Abs(ShopDoor->GetAngle()) < 5.f && !ShopDoor->IsHeldOpen());
 					}
 					const TArray<TObjectPtr<ATSSProductItem>>& Items = Reg->GetItems();
 					Check(TEXT("the basket is on the counter as real product items"), Items.Num() >= 1);
@@ -622,13 +806,33 @@ void ATSSPlayerController::TSSCustomerTest()
 				break;
 			}
 		}
+		else if (St->Run == 3)
+		{
+			if (!St->Customer.IsValid())
+			{
+				Check(TEXT("a customer arriving at a closed shop turns away: no sale, nothing on the counter"),
+					Store->GetServed() == St->Served0 && Reg->GetPhase() == ETSSCheckoutPhase::Idle && Reg->GetItems().Num() == 0);
+				Check(TEXT("and turning away is not counted as an unhappy walk-out"), Store->GetLost() == St->Lost0);
+				Store->SetOpen(true);
+				St->Run = 99;
+			}
+			else if (Reg->GetPhase() != ETSSCheckoutPhase::Idle || bTimeout)
+			{
+				Check(TEXT("a customer arriving at a closed shop turns away: no sale, nothing on the counter"), false);
+				Store->SetOpen(true);
+				St->Run = 99;
+			}
+		}
 		else if (St->Run == 2)
 		{
 			if (Store->GetLost() > St->Lost0)
 			{
 				Check(TEXT("an overpriced shop loses the customer"), true);
 				for (const TPair<ETSSProduct, int32>& KV : St->OldPrices) Store->SetPrice(KV.Key, KV.Value);
-				St->Run = 99;
+				// Run 3: the sign says CLOSED. A customer who arrives must turn away without ever reaching the counter.
+				Store->SetOpen(false);
+				St->Run = 3;
+				Spawn(ETSSPayMethod::Cash);
 			}
 			else if (bTimeout) { Check(TEXT("an overpriced shop loses the customer"), false); St->Run = 99; }
 		}

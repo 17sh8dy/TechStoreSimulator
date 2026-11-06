@@ -13,6 +13,18 @@ enum class ETSSOrderStatus : uint8
 };
 
 USTRUCT()
+struct FTSSMovedObject
+{
+	GENERATED_BODY()
+
+	/** ATSSInteractable::LayoutKey of the shelf or computer the owner moved. */
+	UPROPERTY() FName Key;
+	UPROPERTY() FTransform Transform;
+	/** Which wall it now stands against (0 none, 1 back, 2 left, 3 right), so it slides with that wall on expansion. */
+	UPROPERTY() int32 Anchor = 0;
+};
+
+USTRUCT()
 struct FTSSOrderLine
 {
 	GENERATED_BODY()

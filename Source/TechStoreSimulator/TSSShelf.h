@@ -35,6 +35,9 @@ public:
 	virtual FString GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const override;
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) override;
 	virtual void Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Direction) override;
+	virtual bool IsMovable() const override { return true; }
+	virtual FString GetMoveName() const override { return TEXT("shelf"); }
+	virtual FName LayoutKey() const override;
 
 	/** Every slot that currently has something in it, across all shelves in the world. */
 	static void CollectStock(UWorld* World, TArray<FTSSStockRef>& Out);

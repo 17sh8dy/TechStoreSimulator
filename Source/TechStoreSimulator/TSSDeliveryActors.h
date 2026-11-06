@@ -54,6 +54,20 @@ public:
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) override;
 
 	void Init(int32 InOrderId, ETSSProduct InProduct, int32 InQty);
+
+	/**
+	 * Where the next parcel goes. Parcels are stacked in the corner by the delivery dock, a layer at a time (the
+	 * floor first, then a second layer on top, and so on), so a big delivery never spreads across the shop.
+	 * Cells that are blocked by furniture or sit on the path from the door are skipped.
+	 */
+	static FVector NextStackSlot(UWorld* World);
+	/** Drops any parcel that is left floating after the one under it was unpacked. */
+	static void SettleStacks(UWorld* World);
+
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+
+	static constexpr float StackStep = 40.f;   // height of one parcel
+	static constexpr int32 MaxStack = 7;       // 7 x 40 cm = 2.8 m, under the 3.2 m ceiling
 	int32 GetQty() const { return Qty; }
 	int32 GetOrderId() const { return OrderId; }
 	ETSSProduct GetProduct() const { return Product; }

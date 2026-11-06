@@ -38,4 +38,7 @@ public:
 	UPROPERTY() TArray<FTSSOrder> Orders;
 	UPROPERTY() TArray<FName> Upgrades;
 	UPROPERTY() TArray<FName> Achievements;
+
+	// Where the owner has put shelves and the computer
+	UPROPERTY() TArray<FTSSMovedObject> MovedObjects;
 };

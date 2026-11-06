@@ -100,6 +100,8 @@ private:
 	void GrabFirstItem();
 	void DecideAfterExamining();
 	void FinishBrowsing();
+	/** The shop closed while this customer was still on the way in or browsing: put things back and go. */
+	void TurnAway();
 	void WalkOut(const FString& Reason, bool bUnhappy);
 	void StartCheckout();
 	void BeginPaymentGestures();

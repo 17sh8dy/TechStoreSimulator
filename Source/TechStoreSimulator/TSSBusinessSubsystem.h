@@ -69,6 +69,13 @@ public:
 	/** The shop day starts at this hour on a new game. */
 	static constexpr float StartHour = 8.f;
 
+	// ---- the shop layout the owner has rearranged ----
+	/** Called when the owner puts a shelf or the computer down: works out its wall anchor, remembers and saves it. */
+	void FinishMove(class ATSSInteractable* Obj);
+	/** Puts every moved object back where the owner left it (runs shortly after the level starts). */
+	void ApplyLayout();
+	int32 GetMovedCount() const { return MovedObjects.Num(); }
+
 	/** Hour of the in-game day, 0 <= h < 24 (8.5 = 8:30 AM). */
 	float GetHour() const { return FMath::Fmod(StartHour + SimSeconds / DayLengthSeconds * 24.f + 24.f * 1000.f, 24.f); }
 	/** Jumps the clock to this hour of the current day (developer/test helper; it also moves order timers). */
@@ -126,6 +133,8 @@ private:
 
 	UPROPERTY() int32 XP = 0;
 	UPROPERTY() float SimSeconds = 0.f;
+	UPROPERTY() TArray<FTSSMovedObject> MovedObjects;
+	FTimerHandle LayoutTimer;
 	UPROPERTY() int32 NextOrderId = 1;
 	UPROPERTY() TArray<FTSSOrder> Orders;
 	UPROPERTY() TArray<FName> Upgrades;

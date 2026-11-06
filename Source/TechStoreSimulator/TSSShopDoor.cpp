@@ -19,10 +19,15 @@ namespace
 	constexpr float DoorHalfGapCm = TSSStoreLayout::DoorHalfGap;
 	constexpr float WallThick = 20.f;
 	constexpr float LeafThick = 4.f;
-	constexpr float LeafWidth = 104.f;
-	constexpr float LeafHeight = 224.f;
+	constexpr float JambThick = 5.f;
+	constexpr float OpeningHalf = DoorHalfGapCm - JambThick;      // half the clear opening between the jambs
+	constexpr float LeafWidth = 2.f * OpeningHalf - 3.f;           // 1.5 cm of clearance either side
+	constexpr float LeafBottom = 1.f;
+	constexpr float HeadBottom = 235.f;                            // underside of the frame head (the lintel above is at 240)
+	constexpr float LeafHeight = HeadBottom - LeafBottom - 1.f;    // 1 cm under the head
 	constexpr float LeafX = WallThick * 0.5f;          // the door sits in the middle of the wall's thickness
-	constexpr float HingeY = -(DoorHalfGapCm - 6.f);   // the hinge is on the -Y jamb; the door swings outward
+	constexpr float HingeY = -(OpeningHalf - 1.5f);    // the hinge is on the -Y jamb
+	constexpr float OpenDegrees = 100.f;               // how far the door swings, either way
 	constexpr float SwingSpeed = 150.f;                // degrees per second
 	constexpr float NpcOpenRadius = 150.f;
 	constexpr float WatchHeight = 150.f;
@@ -63,23 +68,25 @@ ATSSShopDoor::ATSSShopDoor()
 	SetRootComponent(Root);
 
 	// Frame: two jambs and a head, filling the 120 cm opening.
-	const float JambY = DoorHalfGapCm - 2.5f;
-	Part(TEXT("JambLeft"), Root, FVector(LeafX, -JambY, 120.f), FVector(WallThick + 2.f, 5.f, 240.f), FrameColor, true);
-	Part(TEXT("JambRight"), Root, FVector(LeafX, JambY, 120.f), FVector(WallThick + 2.f, 5.f, 240.f), FrameColor, true);
-	Part(TEXT("Head"), Root, FVector(LeafX, 0.f, 237.5f), FVector(WallThick + 2.f, 2.f * DoorHalfGapCm, 5.f), FrameColor, true);
+	const float JambY = DoorHalfGapCm - JambThick * 0.5f;
+	Part(TEXT("JambLeft"), Root, FVector(LeafX, -JambY, 120.f), FVector(WallThick + 2.f, JambThick, 240.f), FrameColor, true);
+	Part(TEXT("JambRight"), Root, FVector(LeafX, JambY, 120.f), FVector(WallThick + 2.f, JambThick, 240.f), FrameColor, true);
+	Part(TEXT("Head"), Root, FVector(LeafX, 0.f, HeadBottom + JambThick * 0.5f), FVector(WallThick + 2.f, 2.f * DoorHalfGapCm, JambThick), FrameColor, true);
+	// A sill closes the small gap under the door.
+	Part(TEXT("Sill"), Root, FVector(LeafX, 0.f, 1.f), FVector(WallThick + 2.f, 2.f * OpeningHalf, 2.f), FrameColor, false);
 
 	// The door turns about this point; everything on the door is a child of the leaf.
 	Hinge = CreateDefaultSubobject<USceneComponent>(TEXT("Hinge"));
 	Hinge->SetupAttachment(Root);
 	Hinge->SetRelativeLocation(FVector(LeafX, HingeY, 0.f));
 
-	Leaf = Part(TEXT("Leaf"), Hinge, FVector(0.f, LeafWidth * 0.5f, 2.f + LeafHeight * 0.5f), FVector(LeafThick, LeafWidth, LeafHeight), LeafColor, true);
+	Leaf = Part(TEXT("Leaf"), Hinge, FVector(0.f, LeafWidth * 0.5f, LeafBottom + LeafHeight * 0.5f), FVector(LeafThick, LeafWidth, LeafHeight), LeafColor, true);
 	// Everything on the door hangs off the hinge (not the leaf), so it is not squashed by the leaf's scale.
 	auto OnLeaf = [this](const TCHAR* Name, FVector Loc, FVector Size, FLinearColor Color, bool bCylinder = false)
 	{
 		return Part(Name, Hinge, Loc, Size, Color, false, bCylinder);
 	};
-	const float Zc = 2.f; // the door's bottom edge is 2 cm off the floor; heights below are from the floor
+	const float Zc = LeafBottom; // heights below are from the floor
 	OnLeaf(TEXT("WindowFrame"), FVector(0.f, LeafWidth * 0.5f, Zc + 160.f), FVector(LeafThick + 0.6f, 72.f, 74.f), FrameColor);
 	OnLeaf(TEXT("Window"), FVector(0.f, LeafWidth * 0.5f, Zc + 160.f), FVector(LeafThick + 1.2f, 66.f, 68.f), GlassColor);
 
@@ -119,10 +126,10 @@ ATSSShopDoor::ATSSShopDoor()
 	SignInside = MakeText(TEXT("SignInside"), -1.f);
 
 	// The shop bell: a small brass bell hung on a bracket inside, above the door. It swings when it rings.
-	Part(TEXT("BellBracket"), Root, FVector(-5.f, 0.f, 233.f), FVector(4.f, 26.f, 3.f), MetalColor);
+	Part(TEXT("BellBracket"), Root, FVector(-2.f, 0.f, 262.f), FVector(4.f, 26.f, 3.f), MetalColor);
 	BellPivot = CreateDefaultSubobject<USceneComponent>(TEXT("BellPivot"));
 	BellPivot->SetupAttachment(Root);
-	BellPivot->SetRelativeLocation(FVector(-5.f, 0.f, 231.f));
+	BellPivot->SetRelativeLocation(FVector(-5.f, 0.f, 260.f));
 	Part(TEXT("BellSpring"), BellPivot, FVector(0.f, 0.f, -4.f), FVector(1.2f, 1.2f, 8.f), MetalColor, false, true);
 	Part(TEXT("BellBody"), BellPivot, FVector(0.f, 0.f, -13.f), FVector(11.f, 11.f, 10.f), FLinearColor(0.78f, 0.58f, 0.14f), false, true);
 	Part(TEXT("BellRim"), BellPivot, FVector(0.f, 0.f, -18.5f), FVector(13.5f, 13.5f, 1.6f), FLinearColor(0.7f, 0.5f, 0.1f), false, true);
@@ -144,6 +151,25 @@ void ATSSShopDoor::OnConstruction(const FTransform& Transform)
 void ATSSShopDoor::ToggleDoor()
 {
 	bHeldOpen = !bHeldOpen;
+	// The door swings away from whoever opens it: from outside it opens into the shop, from inside it opens out.
+	if (bHeldOpen && FMath::Abs(CurrentAngle) < 2.f)
+	{
+		if (const APawn* P = UGameplayStatics::GetPlayerPawn(this, 0)) SwingDir = DirectionAwayFrom(P->GetActorLocation());
+	}
+}
+
+int32 ATSSShopDoor::DirectionAwayFrom(const FVector& World) const
+{
+	const FVector L = GetActorTransform().InverseTransformPosition(World);
+	return L.X > WallThick * 0.5f ? +1 : -1;   // +1 inward, -1 outward
+}
+
+bool ATSSShopDoor::PlayerInSwingZone() const
+{
+	const APawn* P = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (!P) return false;
+	const FVector L = GetActorTransform().InverseTransformPosition(P->GetActorLocation());
+	return L.X < WallThick * 0.5f && L.X > -(LeafWidth + 25.f) && FMath::Abs(L.Y) < DoorHalfGapCm + 20.f;
 }
 
 void ATSSShopDoor::ToggleSign()
@@ -181,19 +207,24 @@ bool ATSSShopDoor::PlayerInDoorway() const
 	return FMath::Abs(L.Y) < DoorHalfGapCm + 40.f && L.X > -70.f && L.X < 130.f;
 }
 
-bool ATSSShopDoor::NpcNearDoor() const
+bool ATSSShopDoor::NpcNearDoor(int32& OutDir) const
 {
+	// The nearest walker decides which way the door swings: away from them.
 	const FVector Centre = GetActorLocation() + GetActorForwardVector() * (WallThick * 0.5f);
-	for (TActorIterator<ATSSCustomer> It(GetWorld()); It; ++It)
+	float Best = NpcOpenRadius;
+	bool bFound = false;
+	auto Consider = [&](const FVector& P)
 	{
-		if (FVector::Dist2D(It->GetActorLocation(), Centre) < NpcOpenRadius) return true;
-	}
+		const float D = FVector::Dist2D(P, Centre);
+		if (D < Best) { Best = D; OutDir = DirectionAwayFrom(P); bFound = true; }
+	};
+	for (TActorIterator<ATSSCustomer> It(GetWorld()); It; ++It) Consider(It->GetActorLocation());
 	for (TActorIterator<ATSSDeliveryTruck> It(GetWorld()); It; ++It)
 	{
 		FVector C;
-		if (It->GetCourierLocation(C) && FVector::Dist2D(C, Centre) < NpcOpenRadius) return true;
+		if (It->GetCourierLocation(C)) Consider(C);
 	}
-	return false;
+	return bFound;
 }
 
 void ATSSShopDoor::RefreshSign(bool bOpen)
@@ -214,7 +245,8 @@ void ATSSShopDoor::Tick(float Dt)
 	const UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
 	RefreshSign(!Store || Store->IsOpen());
 
-	bSomeoneNear = NpcNearDoor();
+	int32 NpcDir = SwingDir;
+	bSomeoneNear = NpcNearDoor(NpcDir);
 	WatchCrossings();
 
 	// The bell swings and settles after each ring.
@@ -223,11 +255,17 @@ void ATSSShopDoor::Tick(float Dt)
 	BellPivot->SetRelativeRotation(FRotator(0.f, 0.f, Swing));
 	// Open if the owner opened it or somebody is walking through; never shut it on the owner.
 	const bool bWantOpen = bHeldOpen || bSomeoneNear || PlayerInDoorway();
-	const float Target = bWantOpen ? OpenAngle : 0.f;
+	// The direction is chosen as the door starts to open and then kept until it has shut again.
+	if (bWantOpen && !bHeldOpen && bSomeoneNear && FMath::Abs(CurrentAngle) < 2.f)
+	{
+		SwingDir = NpcDir;
+		if (SwingDir > 0 && PlayerInSwingZone()) SwingDir = -1;   // do not swing into the owner standing just inside
+	}
+	const float Target = bWantOpen ? SwingDir * OpenDegrees : 0.f;
 	if (!FMath::IsNearlyEqual(CurrentAngle, Target))
 	{
 		CurrentAngle = FMath::FInterpConstantTo(CurrentAngle, Target, Dt, SwingSpeed);
-		PeakAngle = FMath::Min(PeakAngle, CurrentAngle);
+		PeakSwing = FMath::Max(PeakSwing, FMath::Abs(CurrentAngle));
 		Hinge->SetRelativeRotation(FRotator(0.f, CurrentAngle, 0.f));
 	}
 }
@@ -258,7 +296,7 @@ void ATSSShopDoor::RingBell()
 		Falloff->Attenuation.FalloffDistance = 2200.f;
 	}
 	USoundBase* Sound = ShopBellSound();
-	if (Sound) UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation() + FVector(-5.f, 0.f, 230.f), 1.f, 1.f, 0.f, Falloff);
+	if (Sound) UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation() + FVector(-5.f, 0.f, 255.f), 1.f, 1.f, 0.f, Falloff);
 	UE_LOG(LogTemp, Display, TEXT("TSS bell rang #%d (sound %s)"), Rings, Sound ? TEXT("played") : TEXT("MISSING"));
 }
 

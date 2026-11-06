@@ -1,6 +1,7 @@
 #include "TSSBusinessSubsystem.h"
 #include "TSSDeliveryActors.h"
 #include "TSSBusinessSave.h"
+#include "TSSInteractable.h"
 #include "TSSShelf.h"
 #include "TSSStoreLayout.h"
 #include "TSSStoreSubsystem.h"
@@ -111,6 +112,7 @@ void UTSSBusinessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		Orders = Save->Orders;
 		Upgrades = Save->Upgrades;
 		Achievements = Save->Achievements;
+		MovedObjects = Save->MovedObjects;
 		// Parcels are not saved: an order that had already arrived is simply re-delivered.
 		for (FTSSOrder& O : Orders)
 		{
@@ -145,6 +147,58 @@ void UTSSBusinessSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
 	for (const FName& U : Upgrades) ApplyUpgrade(U);
+	// The shell has finished sliding walls and wall-anchored furniture by now; then put the owner's own layout back.
+	InWorld.GetTimerManager().SetTimer(LayoutTimer, FTimerDelegate::CreateUObject(this, &UTSSBusinessSubsystem::ApplyLayout), 0.5f, false);
+}
+
+void UTSSBusinessSubsystem::FinishMove(ATSSInteractable* Obj)
+{
+	if (!Obj) return;
+	// Which wall is it against now? (Within 30 cm; the nearest one wins.)
+	FVector C, E;
+	Obj->GetActorBounds(false, C, E);
+	const int32 Stage = GetStoreStage();
+	const float DBack = (C.X - E.X) - TSSStoreLayout::BackX(Stage);
+	const float DLeft = (C.Y - E.Y) + TSSStoreLayout::HalfWidth(Stage);
+	const float DRight = TSSStoreLayout::HalfWidth(Stage) - (C.Y + E.Y);
+	TSSStoreLayout::EAnchor A = TSSStoreLayout::EAnchor::None;
+	float Best = 30.f;
+	if (DBack < Best) { Best = DBack; A = TSSStoreLayout::EAnchor::Back; }
+	if (DLeft < Best) { Best = DLeft; A = TSSStoreLayout::EAnchor::Left; }
+	if (DRight < Best) { Best = DRight; A = TSSStoreLayout::EAnchor::Right; }
+	for (const TSSStoreLayout::EAnchor X : { TSSStoreLayout::EAnchor::Back, TSSStoreLayout::EAnchor::Left, TSSStoreLayout::EAnchor::Right })
+	{
+		Obj->Tags.Remove(FName(TSSStoreLayout::AnchorTag(X)));
+	}
+	if (A != TSSStoreLayout::EAnchor::None) Obj->Tags.AddUnique(FName(TSSStoreLayout::AnchorTag(A)));
+
+	FTSSMovedObject* Entry = MovedObjects.FindByPredicate([Obj](const FTSSMovedObject& M) { return M.Key == Obj->LayoutKey(); });
+	if (!Entry) Entry = &MovedObjects.AddDefaulted_GetRef();
+	Entry->Key = Obj->LayoutKey();
+	Entry->Transform = Obj->GetActorTransform();
+	Entry->Anchor = static_cast<int32>(A);
+	Obj->OnMoved();
+	SaveNow();
+}
+
+void UTSSBusinessSubsystem::ApplyLayout()
+{
+	if (MovedObjects.Num() == 0) return;
+	for (TActorIterator<ATSSInteractable> It(GetWorld()); It; ++It)
+	{
+		ATSSInteractable* Obj = *It;
+		if (!Obj->IsMovable()) continue;
+		const FTSSMovedObject* M = MovedObjects.FindByPredicate([Obj](const FTSSMovedObject& X) { return X.Key == Obj->LayoutKey(); });
+		if (!M) continue;
+		Obj->SetActorTransform(M->Transform);
+		for (const TSSStoreLayout::EAnchor X : { TSSStoreLayout::EAnchor::Back, TSSStoreLayout::EAnchor::Left, TSSStoreLayout::EAnchor::Right })
+		{
+			Obj->Tags.Remove(FName(TSSStoreLayout::AnchorTag(X)));
+		}
+		const TSSStoreLayout::EAnchor A = static_cast<TSSStoreLayout::EAnchor>(M->Anchor);
+		if (A != TSSStoreLayout::EAnchor::None) Obj->Tags.AddUnique(FName(TSSStoreLayout::AnchorTag(A)));
+		Obj->OnMoved();
+	}
 }
 
 void UTSSBusinessSubsystem::HandleSale(const FTSSTransaction& Sale)
@@ -173,6 +227,7 @@ void UTSSBusinessSubsystem::SaveNow()
 	Save->Orders = Orders;
 	Save->Upgrades = Upgrades;
 	Save->Achievements = Achievements;
+	Save->MovedObjects = MovedObjects;
 	UGameplayStatics::SaveGameToSlot(Save, SlotName, 0);
 }
 

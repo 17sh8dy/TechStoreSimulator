@@ -13,6 +13,7 @@ class ATSSProductItem;
 class UTSSProductBoxComponent;
 class UTSSSettingsSubsystem;
 class ATSSInteractable;
+class UTSSMoverComponent;
 
 /** The shop owner. Switches between a first-person and third-person camera from the View settings. */
 UCLASS()
@@ -37,6 +38,10 @@ public:
 	/** Pass None to empty the hands. */
 	void SetHeld(ETSSProduct Product);
 
+	/** Presses E on something: its action plus the little reach gesture. */
+	void InteractWith(ATSSInteractable* Target, const FHitResult& Hit);
+	UTSSMoverComponent* GetMover() const { return Mover; }
+
 	/** What the crosshair is on, as a HUD prompt ("" when nothing). */
 	const FString& GetFocusPrompt() const { return FocusPrompt; }
 
@@ -52,6 +57,7 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
 	UPROPERTY() TObjectPtr<UTSSHumanComponent> Human;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTSSProductBoxComponent> HeldMesh;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UTSSMoverComponent> Mover;
 
 	ETSSProduct Held = ETSSProduct::None;
 	float GestureTimer = 0.f;

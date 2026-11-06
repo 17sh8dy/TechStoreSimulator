@@ -18,4 +18,13 @@ public:
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) {}
 	/** Mouse wheel while looking at this: +1 / -1. */
 	virtual void Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Direction) {}
+
+	/** True if the owner can pick this up and rearrange it (hold E for two seconds). */
+	virtual bool IsMovable() const { return false; }
+	/** What to call it in the move prompt. */
+	virtual FString GetMoveName() const { return TEXT("object"); }
+	/** A stable name for saving where the owner put it. */
+	virtual FName LayoutKey() const { return GetFName(); }
+	/** Called after the owner has put it down in a new place. */
+	virtual void OnMoved() {}
 };

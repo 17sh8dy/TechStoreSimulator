@@ -339,6 +339,14 @@ void ATSSCustomer::FinishBrowsing()
 	StartPath({ Register->HubPoint });
 }
 
+void ATSSCustomer::TurnAway()
+{
+	// Someone who has not reached the queue yet does not shop in a closed shop. Not a lost sale: the shop was shut.
+	const bool bOutside = Register && GetActorLocation().X > Register->DoorPoint.X - 40.f;
+	WalkOut(TEXT("Oh, you are closed."), false);
+	if (bOutside && Register) StartPath({ Register->SpawnPoint });   // never came in: simply turn round
+}
+
 void ATSSCustomer::WalkOut(const FString& Reason, bool bUnhappy)
 {
 	ClearScript();
@@ -522,6 +530,13 @@ void ATSSCustomer::Tick(float Dt)
 	}
 
 	const FVector Start = GetActorLocation();
+
+	// Closed: anyone still entering or browsing turns away (people already queueing or at the till are served).
+	if (!Store->IsOpen() && (State == ETSSCustomerState::Entering || State == ETSSCustomerState::Looking))
+	{
+		TurnAway();
+		return;
+	}
 
 	switch (State)
 	{
