@@ -593,6 +593,11 @@ void ATSSCustomer::Tick(float Dt)
 		else Human->Relax(RHand, BlendSeconds());
 	}
 
+	if (CarriedMesh->IsVisible() && CarriedMesh->IsPlain())
+	{
+		bBagSeen = true;
+		if (CarriedMesh->IsPanelDrawn()) bStrayPanelSeen = true;
+	}
 	FollowRightHand(CarriedMesh, CarriedDepth);
 	FollowRightHand(HandProp, 8.f);
 }

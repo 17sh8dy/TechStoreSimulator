@@ -23,6 +23,9 @@ public:
 	/** A plain coloured block with no packaging (e.g. a shopping bag). */
 	void SetPlain(const FVector& SizeCm, const FLinearColor& Color);
 	ETSSProduct GetProduct() const { return Product; }
+	/** True if the packaging-art panel would actually be drawn right now (for tests). */
+	bool IsPanelDrawn() const { return Panel && Panel->IsVisible() && !Panel->bHiddenInGame; }
+	bool IsPlain() const { return !PlainSize.IsZero(); }
 
 protected:
 	virtual void OnRegister() override;

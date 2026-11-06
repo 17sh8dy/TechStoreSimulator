@@ -106,7 +106,9 @@ void UTSSProductBoxComponent::Apply()
 	if (bPlain)
 	{
 		SetMaterial(0, PlainMaterial(PlainColor));
-		if (Panel) Panel->SetVisibility(false);
+		// Hidden-in-game, not Visibility: showing the parent with propagation (SetVisibility(true, true)) would
+		// switch a Visibility-hidden panel back on, and it has no material here (a default checkered cube).
+		if (Panel) Panel->SetHiddenInGame(true);
 		return;
 	}
 
@@ -119,10 +121,10 @@ void UTSSProductBoxComponent::Apply()
 		Panel->SetRelativeLocation(FVector(50.f + 0.5f * ThicknessCm * 100.f / Size.X, 0.f, 0.f));
 		Panel->SetRelativeScale3D(FVector(ThicknessCm / Size.X, 1.f, 1.f));
 		Panel->SetMaterial(0, Art);
-		Panel->SetVisibility(true);
+		Panel->SetHiddenInGame(false);
 	}
 	else
 	{
-		Panel->SetVisibility(false);
+		Panel->SetHiddenInGame(true);
 	}
 }

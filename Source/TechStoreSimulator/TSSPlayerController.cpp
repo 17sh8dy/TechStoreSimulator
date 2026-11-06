@@ -315,6 +315,7 @@ void ATSSPlayerController::TSSCustomerTest()
 		float Hold = 0.f;      // wait before the next action (lets a screenshot happen)
 		float Elapsed = 0.f;   // time in the current step
 		int32 Fails = 0;
+		bool BagSeen = false, StrayPanel = false;
 		TMap<ETSSProduct, int32> OldPrices;
 	};
 	TSharedRef<FState> St = MakeShared<FState>();
@@ -485,7 +486,15 @@ void ATSSPlayerController::TSSCustomerTest()
 				St->Step = 6; St->Elapsed = 0.f;
 				break;
 			case 6:
-				if (St->Customer.IsValid()) { if (St->Elapsed > 90.f) Fail(TEXT("the customer left the shop")); return; }
+				if (St->Customer.IsValid())
+			{
+				if (St->Customer->WasBagSeen()) St->BagSeen = true;
+				if (St->Customer->WasStrayPanelSeen()) St->StrayPanel = true;
+				if (St->Elapsed > 90.f) Fail(TEXT("the customer left the shop"));
+				return;
+			}
+			if (St->Run == 0 || St->Run == 1) Check(TEXT("the shopping bag leaves as a plain bag, with no stray checkered cube"), St->BagSeen && !St->StrayPanel);
+			St->BagSeen = St->StrayPanel = false;
 				Check(TEXT("the customer walked out and is gone"), true);
 				UE_LOG(LogTemp, Display, TEXT("TSS debug: phase=%d items=%d"), static_cast<int32>(Reg->GetPhase()), Reg->GetItems().Num());
 				for (TActorIterator<ATSSCustomer> CIt(GetWorld()); CIt; ++CIt) UE_LOG(LogTemp, Display, TEXT("TSS debug customer %s state=%d at %s tracked=%d"), *CIt->GetName(), static_cast<int32>(CIt->GetState()), *CIt->GetActorLocation().ToString(), St->Customer.Get() == *CIt);

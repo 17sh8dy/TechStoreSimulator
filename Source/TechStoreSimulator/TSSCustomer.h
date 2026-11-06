@@ -60,6 +60,9 @@ public:
 	void Say(const FString& Text, float Seconds = 2.5f);
 
 	ETSSCustomerState GetState() const { return State; }
+	/** For tests: has the customer been seen carrying a shopping bag, and did a packaging panel ever show on it? */
+	bool WasBagSeen() const { return bBagSeen; }
+	bool WasStrayPanelSeen() const { return bStrayPanelSeen; }
 	const TArray<FTSSBasketItem>& GetBasket() const { return Basket; }
 	/** True while a scripted gesture sequence is running. */
 	bool IsBusyGesturing() const { return Script.Num() > 0; }
@@ -138,6 +141,8 @@ private:
 	bool bForceCash = false;
 	/** Carrying something in the right hand: it is held at the chest between tasks. */
 	bool bCarrying = false;
+	bool bBagSeen = false;        // test latches: the carried plain bag was visible at some frame ...
+	bool bStrayPanelSeen = false; // ... and a packaging panel was (wrongly) drawn on it
 	bool bRunning = false;
 	float CarriedDepth = 6.f;
 	/** How much over the going rate this person will pay (a multiple of wholesale). */
