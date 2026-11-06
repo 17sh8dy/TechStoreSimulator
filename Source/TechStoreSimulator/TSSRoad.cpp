@@ -118,4 +118,62 @@ void ATSSRoad::Rebuild()
 		TSSApplyColor(Dash, FLinearColor(0.9f, 0.82f, 0.25f));
 		Generated.Add(Dash);
 	}
+
+	// ---- crosswalk (zebra stripes across the road) and street lamps ----
+	auto AddBox = [&](FVector WorldCentre, FRotator Rot, FVector SizeCm, const FLinearColor& Color)
+	{
+		UStaticMeshComponent* P = NewObject<UStaticMeshComponent>(this);
+		P->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+		P->SetMobility(EComponentMobility::Movable);
+		P->SetStaticMesh(Cube);
+		P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		P->AttachToComponent(Spline, FAttachmentTransformRules::KeepRelativeTransform);
+		P->SetWorldLocation(WorldCentre);
+		P->SetWorldRotation(Rot);
+		P->SetWorldScale3D(SizeCm / 100.f);
+		P->RegisterComponent();
+		TSSApplyColor(P, Color);
+		Generated.Add(P);
+	};
+	static UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+
+	// The crosswalk sits a little before the shop so the parked truck never covers it.
+	const float CrossAt = FMath::Clamp(Len * 0.5f - 500.f, 300.f, Len - 300.f);
+	{
+		const FVector Mid = Spline->GetLocationAtDistanceAlongSpline(CrossAt, ESplineCoordinateSpace::World);
+		const FVector Fwd = Spline->GetDirectionAtDistanceAlongSpline(CrossAt, ESplineCoordinateSpace::World).GetSafeNormal2D();
+		const FVector Rgt = FVector::CrossProduct(FVector::UpVector, Fwd);
+		const FRotator Rot(0.f, Fwd.Rotation().Yaw, 0.f);
+		for (float Off = -RoadWidth * 0.5f + 40.f; Off < RoadWidth * 0.5f - 20.f; Off += 85.f)
+		{
+			AddBox(Mid + Rgt * Off + FVector(0.f, 0.f, 2.3f), Rot, FVector(320.f, 45.f, 0.5f), FLinearColor(0.9f, 0.9f, 0.88f));
+		}
+	}
+
+	const FLinearColor Pole(0.14f, 0.15f, 0.17f), Lamp(1.f, 0.93f, 0.7f);
+	int32 Count = 0;
+	for (float D = 500.f; D < Len - 200.f; D += 1300.f, ++Count)
+	{
+		const FVector Pt = Spline->GetLocationAtDistanceAlongSpline(D, ESplineCoordinateSpace::World);
+		const FVector Fwd = Spline->GetDirectionAtDistanceAlongSpline(D, ESplineCoordinateSpace::World).GetSafeNormal2D();
+		const FVector Rgt = FVector::CrossProduct(FVector::UpVector, Fwd);
+		const float Side = (Count % 2 == 0) ? 1.f : -1.f;   // alternate sides of the road
+		const FVector Base = Pt + Rgt * Side * (RoadWidth * 0.5f + 50.f);
+		const FRotator Rot(0.f, Fwd.Rotation().Yaw, 0.f);
+
+		UStaticMeshComponent* Post = NewObject<UStaticMeshComponent>(this);
+		Post->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+		Post->SetMobility(EComponentMobility::Movable);
+		Post->SetStaticMesh(Cylinder);
+		Post->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Post->AttachToComponent(Spline, FAttachmentTransformRules::KeepRelativeTransform);
+		Post->SetWorldLocation(Base + FVector(0.f, 0.f, 300.f));
+		Post->SetWorldScale3D(FVector(0.16f, 0.16f, 6.f));
+		Post->RegisterComponent();
+		TSSApplyColor(Post, Pole);
+		Generated.Add(Post);
+		// Arm reaching over the road, with the lamp head at its end.
+		AddBox(Base + FVector(0.f, 0.f, 598.f) - Rgt * Side * 70.f, Rot, FVector(10.f, 170.f, 10.f), Pole);
+		AddBox(Base + FVector(0.f, 0.f, 590.f) - Rgt * Side * 150.f, Rot, FVector(60.f, 28.f, 12.f), Lamp);
+	}
 }

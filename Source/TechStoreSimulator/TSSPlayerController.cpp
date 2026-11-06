@@ -54,7 +54,11 @@ void ATSSPlayerController::BeginPlay()
 			At(4.6f, TEXT("Shot ShowUI"));
 			At(5.4f, TEXT("TSSLook 830 120 150 -15 -6"));
 			At(7.0f, TEXT("Shot ShowUI"));
-			At(8.5f, TEXT("quit"));
+			At(7.6f, TEXT("TSSLook 760 0 160 0 -2"));
+			At(8.6f, TEXT("Shot ShowUI"));
+			At(9.2f, TEXT("TSSLook 790 -650 170 -35 -3"));
+			At(10.2f, TEXT("Shot ShowUI"));
+			At(11.5f, TEXT("quit"));
 		}, 1.5f, false);
 	}
 
