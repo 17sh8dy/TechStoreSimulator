@@ -10,6 +10,8 @@
 #include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sound/SoundAttenuation.h"
+#include "Sound/SoundBase.h"
 
 namespace
 {
@@ -115,6 +117,15 @@ ATSSShopDoor::ATSSShopDoor()
 	};
 	SignOutside = MakeText(TEXT("SignOutside"), 1.f);
 	SignInside = MakeText(TEXT("SignInside"), -1.f);
+
+	// The shop bell: a small brass bell hung on a bracket inside, above the door. It swings when it rings.
+	Part(TEXT("BellBracket"), Root, FVector(-5.f, 0.f, 233.f), FVector(4.f, 26.f, 3.f), MetalColor);
+	BellPivot = CreateDefaultSubobject<USceneComponent>(TEXT("BellPivot"));
+	BellPivot->SetupAttachment(Root);
+	BellPivot->SetRelativeLocation(FVector(-5.f, 0.f, 231.f));
+	Part(TEXT("BellSpring"), BellPivot, FVector(0.f, 0.f, -4.f), FVector(1.2f, 1.2f, 8.f), MetalColor, false, true);
+	Part(TEXT("BellBody"), BellPivot, FVector(0.f, 0.f, -13.f), FVector(11.f, 11.f, 10.f), FLinearColor(0.78f, 0.58f, 0.14f), false, true);
+	Part(TEXT("BellRim"), BellPivot, FVector(0.f, 0.f, -18.5f), FVector(13.5f, 13.5f, 1.6f), FLinearColor(0.7f, 0.5f, 0.1f), false, true);
 }
 
 void ATSSShopDoor::OnConstruction(const FTransform& Transform)
@@ -204,6 +215,12 @@ void ATSSShopDoor::Tick(float Dt)
 	RefreshSign(!Store || Store->IsOpen());
 
 	bSomeoneNear = NpcNearDoor();
+	WatchCrossings();
+
+	// The bell swings and settles after each ring.
+	RingTime += Dt;
+	const float Swing = RingTime < 3.f ? 24.f * FMath::Exp(-RingTime * 2.2f) * FMath::Sin(RingTime * 26.f) : 0.f;
+	BellPivot->SetRelativeRotation(FRotator(0.f, 0.f, Swing));
 	// Open if the owner opened it or somebody is walking through; never shut it on the owner.
 	const bool bWantOpen = bHeldOpen || bSomeoneNear || PlayerInDoorway();
 	const float Target = bWantOpen ? OpenAngle : 0.f;
@@ -212,5 +229,62 @@ void ATSSShopDoor::Tick(float Dt)
 		CurrentAngle = FMath::FInterpConstantTo(CurrentAngle, Target, Dt, SwingSpeed);
 		PeakAngle = FMath::Min(PeakAngle, CurrentAngle);
 		Hinge->SetRelativeRotation(FRotator(0.f, CurrentAngle, 0.f));
+	}
+}
+
+// ---- the bell -------------------------------------------------------------------------------------------
+
+static USoundBase* ShopBellSound()
+{
+	return LoadObject<USoundBase>(nullptr, TEXT("/Game/TSS/Audio/S_ShopBell.S_ShopBell"));
+}
+
+bool ATSSShopDoor::HasBellSound() const { return ShopBellSound() != nullptr; }
+
+void ATSSShopDoor::RingBell()
+{
+	++Rings;
+	RingTime = 0.f;
+	// A door bell is heard in the shop and out on the pavement, fading with distance.
+	static USoundAttenuation* Falloff = nullptr;
+	if (!Falloff)
+	{
+		Falloff = NewObject<USoundAttenuation>(GetTransientPackage());
+		Falloff->AddToRoot();
+		Falloff->Attenuation.bAttenuate = true;
+		Falloff->Attenuation.bSpatialize = true;
+		Falloff->Attenuation.AttenuationShape = EAttenuationShape::Sphere;
+		Falloff->Attenuation.AttenuationShapeExtents = FVector(900.f);
+		Falloff->Attenuation.FalloffDistance = 2200.f;
+	}
+	USoundBase* Sound = ShopBellSound();
+	if (Sound) UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation() + FVector(-5.f, 0.f, 230.f), 1.f, 1.f, 0.f, Falloff);
+	UE_LOG(LogTemp, Display, TEXT("TSS bell rang #%d (sound %s)"), Rings, Sound ? TEXT("played") : TEXT("MISSING"));
+}
+
+void ATSSShopDoor::WatchCrossings()
+{
+	for (auto It = WasOutside.CreateIterator(); It; ++It) if (!It.Key().IsValid()) It.RemoveCurrent();
+
+	// A walker "comes in" when it goes from outdoors (local x > 10) to indoors through the doorway.
+	auto Watch = [this](AActor* Who, const FVector& World)
+	{
+		const FVector L = GetActorTransform().InverseTransformPosition(World);
+		const bool bOutside = L.X > WallThick * 0.5f;
+		if (bool* Prev = WasOutside.Find(Who))
+		{
+			if (*Prev && !bOutside && FMath::Abs(L.Y) < DoorHalfGapCm + 30.f) RingBell();
+			*Prev = bOutside;
+		}
+		else
+		{
+			WasOutside.Add(Who, bOutside);
+		}
+	};
+	for (TActorIterator<ATSSCustomer> It(GetWorld()); It; ++It) Watch(*It, It->GetActorLocation());
+	for (TActorIterator<ATSSDeliveryTruck> It(GetWorld()); It; ++It)
+	{
+		FVector C;
+		if (It->GetCourierLocation(C)) Watch(*It, C);
 	}
 }

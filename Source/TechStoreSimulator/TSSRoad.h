@@ -38,6 +38,10 @@ public:
 	/** Sideways distance from the truck's lane centre to a world point (for checks). */
 	float LaneError(const FVector& World) const;
 
+	/** Street lamps on or off (the day/night cycle switches them at dusk and dawn). */
+	void SetLampsOn(bool bOn);
+	bool AreLampsOn() const { return bLampsOn; }
+
 	/** Rebuilds the placeholder (callable from editor scripts). */
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Road") void Rebuild();
 
@@ -50,4 +54,6 @@ public:
 private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USplineComponent> Spline;
 	UPROPERTY(Transient) TArray<TObjectPtr<UActorComponent>> Generated;
+	UPROPERTY(Transient) TArray<TObjectPtr<class UPointLightComponent>> LampLights;
+	bool bLampsOn = false;
 };

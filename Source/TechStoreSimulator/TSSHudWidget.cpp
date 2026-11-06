@@ -1,6 +1,7 @@
 #include "TSSHudWidget.h"
 #include "TSSCharacter.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSBusinessSubsystem.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -46,6 +47,20 @@ FText UTSSHudWidget::SalesText() const
 		(Store && !Store->IsOpen()) ? TEXT("CLOSED") : TEXT("OPEN"), Store ? Store->GetServed() : 0, Store ? Store->GetCashSales() : 0, Store ? Store->GetCardSales() : 0, Store ? Store->GetLost() : 0));
 }
 
+FText UTSSHudWidget::ClockText() const
+{
+	const UWorld* World = GetWorld();
+	const UTSSBusinessSubsystem* Biz = World ? World->GetSubsystem<UTSSBusinessSubsystem>() : nullptr;
+	return FText::FromString(Biz ? UTSSBusinessSubsystem::FormatClock(Biz->GetHour()) : FString(TEXT("--:--")));
+}
+
+FText UTSSHudWidget::DayText() const
+{
+	const UWorld* World = GetWorld();
+	const UTSSStoreSubsystem* Store = World ? World->GetSubsystem<UTSSStoreSubsystem>() : nullptr;
+	return FText::FromString(FString::Printf(TEXT("Day %d"), Store ? Store->GetDay() : 1));
+}
+
 FText UTSSHudWidget::PromptText() const
 {
 	const ATSSCharacter* Player = GetPlayer();
@@ -89,6 +104,31 @@ TSharedRef<SWidget> UTSSHudWidget::RebuildWidget()
 					SNew(STextBlock)
 					.Text_UObject(this, &UTSSHudWidget::SalesText)
 					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 14))
+					.ColorAndOpacity(HudMuted)
+				]
+			]
+		]
+		// The clock, top centre.
+		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0.f, 24.f, 0.f, 0.f)
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox"))
+			.BorderBackgroundColor(HudPanel)
+			.Padding(FMargin(22.f, 8.f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text_UObject(this, &UTSSHudWidget::ClockText)
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 26))
+					.ColorAndOpacity(HudAccent)
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text_UObject(this, &UTSSHudWidget::DayText)
+					.Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
 					.ColorAndOpacity(HudMuted)
 				]
 			]

@@ -1,6 +1,7 @@
 #include "TSSRoad.h"
 #include "TSSProducts.h"
 #include "Components/SplineComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EngineUtils.h"
@@ -47,6 +48,12 @@ float ATSSRoad::LaneError(const FVector& World) const
 	return FVector::Dist2D(LaneLocation(D), World);
 }
 
+void ATSSRoad::SetLampsOn(bool bOn)
+{
+	bLampsOn = bOn;
+	for (UPointLightComponent* L : LampLights) if (L) L->SetVisibility(bOn);
+}
+
 void ATSSRoad::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
@@ -57,6 +64,7 @@ void ATSSRoad::Rebuild()
 {
 	for (UActorComponent* C : Generated) if (C) C->DestroyComponent();
 	Generated.Reset();
+	LampLights.Reset();
 	if (!bBuildPlaceholder) return;
 
 	UStaticMesh* Cube = TSSCubeMesh();
@@ -175,5 +183,21 @@ void ATSSRoad::Rebuild()
 		// Arm reaching over the road, with the lamp head at its end.
 		AddBox(Base + FVector(0.f, 0.f, 598.f) - Rgt * Side * 70.f, Rot, FVector(10.f, 170.f, 10.f), Pole);
 		AddBox(Base + FVector(0.f, 0.f, 590.f) - Rgt * Side * 150.f, Rot, FVector(60.f, 28.f, 12.f), Lamp);
+
+		// The lamp's light, off until the day/night cycle calls for it.
+		UPointLightComponent* Light = NewObject<UPointLightComponent>(this);
+		Light->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+		Light->SetMobility(EComponentMobility::Movable);
+		Light->SetIntensityUnits(ELightUnits::Lumens);
+		Light->SetIntensity(9000.f);
+		Light->SetAttenuationRadius(1300.f);
+		Light->SetLightColor(FLinearColor(1.f, 0.82f, 0.55f));
+		Light->SetCastShadows(false);
+		Light->AttachToComponent(Spline, FAttachmentTransformRules::KeepRelativeTransform);
+		Light->SetWorldLocation(Base + FVector(0.f, 0.f, 570.f) - Rgt * Side * 150.f);
+		Light->SetVisibility(bLampsOn);
+		Light->RegisterComponent();
+		Generated.Add(Light);
+		LampLights.Add(Light);
 	}
 }

@@ -65,7 +65,18 @@ public:
 	float GetSimSeconds() const { return SimSeconds; }
 	bool IsPrestigeUnlocked() const { return GetLevel() >= PrestigeLevel; }
 	static constexpr int32 PrestigeLevel = 10;
-	static constexpr float DayLengthSeconds = 480.f;
+	static constexpr float DayLengthSeconds = 480.f;   // one in-game day (24 hours) lasts this many real seconds
+	/** The shop day starts at this hour on a new game. */
+	static constexpr float StartHour = 8.f;
+
+	/** Hour of the in-game day, 0 <= h < 24 (8.5 = 8:30 AM). */
+	float GetHour() const { return FMath::Fmod(StartHour + SimSeconds / DayLengthSeconds * 24.f + 24.f * 1000.f, 24.f); }
+	/** Jumps the clock to this hour of the current day (developer/test helper; it also moves order timers). */
+	void SetHour(float Hour);
+	/** "5:44 PM" */
+	static FString FormatClock(float Hour);
+	/** The calendar day number for a given sim time: a new day begins at midnight. */
+	static int32 DayForSeconds(float Seconds) { return 1 + FMath::FloorToInt((Seconds + StartHour / 24.f * DayLengthSeconds) / DayLengthSeconds); }
 
 	// ---- orders & deliveries ------------------------------------------------------------------
 	int32 OrderCost(const TArray<FTSSOrderLine>& Lines) const;

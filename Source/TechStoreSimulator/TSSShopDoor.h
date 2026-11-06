@@ -47,6 +47,13 @@ public:
 	/** True if anything (customer, courier) is making the door open right now. */
 	bool IsBeingUsed() const { return bSomeoneNear; }
 
+	/** The bell over the door rings when a customer or the courier walks in. */
+	int32 GetRingCount() const { return Rings; }
+	/** True if the bell sound asset (/Game/TSS/Audio/S_ShopBell) loads. */
+	bool HasBellSound() const;
+	/** Rings the bell now: sound plus the little bell swinging (public so tests and dev tools can trigger it). */
+	void RingBell();
+
 	static constexpr float OpenAngle = -100.f;
 
 private:
@@ -54,12 +61,17 @@ private:
 	void RefreshSign(bool bOpen);
 	bool PlayerInDoorway() const;
 	bool NpcNearDoor() const;
+	void WatchCrossings();
 
 	UPROPERTY() TObjectPtr<USceneComponent> Hinge;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Leaf;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> SignPlate;
 	UPROPERTY() TObjectPtr<UTextRenderComponent> SignOutside;
 	UPROPERTY() TObjectPtr<UTextRenderComponent> SignInside;
+	UPROPERTY() TObjectPtr<USceneComponent> BellPivot;
+	TMap<TWeakObjectPtr<AActor>, bool> WasOutside;   // per walker: was it outdoors last frame?
+	int32 Rings = 0;
+	float RingTime = 99.f;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
 	TArray<FLinearColor> PartColors;
 

@@ -17,6 +17,8 @@ private:
 	FText MoneyText() const;
 	FText HeldText() const;
 	FText SalesText() const;
+	FText ClockText() const;
+	FText DayText() const;
 	FText PromptText() const;
 	EVisibility PromptVisibility() const;
 	class ATSSCharacter* GetPlayer() const;

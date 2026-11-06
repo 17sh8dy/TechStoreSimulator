@@ -7,6 +7,7 @@
 #include "TSSCharacter.h"
 #include "TSSShopDoor.h"
 #include "TSSRoad.h"
+#include "TSSDayNight.h"
 #include "TSSShelf.h"
 #include "TSSStoreSubsystem.h"
 #include "TSSCustomer.h"
@@ -58,7 +59,16 @@ void ATSSPlayerController::BeginPlay()
 			At(8.6f, TEXT("Shot ShowUI"));
 			At(9.2f, TEXT("TSSLook 790 -650 170 -35 -3"));
 			At(10.2f, TEXT("Shot ShowUI"));
-			At(11.5f, TEXT("quit"));
+			At(10.8f, TEXT("TSSTime 17.8"));
+			At(11.0f, TEXT("TSSLook 760 0 160 0 -2"));
+			At(12.2f, TEXT("Shot ShowUI"));
+			At(12.6f, TEXT("TSSTime 21.5"));
+			At(13.6f, TEXT("Shot ShowUI"));
+			At(14.0f, TEXT("TSSLook 790 -650 170 -35 -3"));
+			At(15.0f, TEXT("Shot ShowUI"));
+			At(15.4f, TEXT("TSSTime 12"));
+			At(16.4f, TEXT("Shot ShowUI"));
+			At(17.5f, TEXT("quit"));
 		}, 1.5f, false);
 	}
 
@@ -286,7 +296,42 @@ void ATSSPlayerController::TSSSelfTest()
 	Door->ToggleSign();
 	Check(TEXT("flipping it again reopens the shop"), Store->IsOpen() && CS->MaySpawn());
 
+	// ---- the clock, the day/night cycle and the bell ----
+	UTSSBusinessSubsystem* Clock = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>();
+	Check(TEXT("the bell sound asset exists"), Door->HasBellSound());
+	Check(TEXT("clock formatting: 17.75 is 5:45 PM, 0 is 12:00 AM, 12 is 12:00 PM, 8.5 is 8:30 AM"),
+		UTSSBusinessSubsystem::FormatClock(17.75f) == TEXT("5:45 PM") && UTSSBusinessSubsystem::FormatClock(0.f) == TEXT("12:00 AM")
+		&& UTSSBusinessSubsystem::FormatClock(12.f) == TEXT("12:00 PM") && UTSSBusinessSubsystem::FormatClock(8.5f) == TEXT("8:30 AM"));
+	if (Clock)
+	{
+		const float Hour0 = Clock->GetHour();
+		Check(TEXT("a new game starts at 8:00 AM"), FMath::IsNearlyEqual(Hour0, UTSSBusinessSubsystem::StartHour, 0.3f) || Clock->GetSimSeconds() > 1.f);
+		ATSSDayNight* DN = nullptr;
+		for (TActorIterator<ATSSDayNight> It(GetWorld()); It; ++It) { DN = *It; break; }
+		ATSSRoad* Rd = ATSSRoad::Find(GetWorld());
+		Check(TEXT("the map has a day/night actor"), DN != nullptr);
+		if (DN)
+		{
+			Clock->SetHour(17.75f);
+			Check(TEXT("setting the time works: 5:45 PM"), FMath::IsNearlyEqual(Clock->GetHour(), 17.75f, 0.01f));
+			Clock->SetHour(12.f); DN->ApplyNow();
+			Check(TEXT("noon: the sun is bright and the street lamps are off"), DN->GetLightLux() > 5.f && !DN->IsNight() && (!Rd || !Rd->AreLampsOn()));
+			Clock->SetHour(23.f); DN->ApplyNow();
+			Check(TEXT("11 PM: it is night, the light is only dim moonlight, the street lamps are on"), DN->IsNight() && DN->GetLightLux() < 1.f && (!Rd || Rd->AreLampsOn()));
+			Clock->SetHour(6.f); DN->ApplyNow();
+			Check(TEXT("sunrise at 6:00 is dimmer than noon but not dark"), DN->GetLightLux() < 8.f && DN->GetLightLux() > 1.f);
+			Clock->SetHour(Hour0); DN->ApplyNow();
+		}
+		Check(TEXT("a new calendar day begins at midnight"), UTSSBusinessSubsystem::DayForSeconds(0.f) == 1
+			&& UTSSBusinessSubsystem::DayForSeconds(UTSSBusinessSubsystem::DayLengthSeconds * 16.f / 24.f + 1.f) == 2);
+	}
+
 	UE_LOG(LogTemp, Display, TEXT("TSSTEST DONE fails=%d"), Fails);
+}
+
+void ATSSPlayerController::TSSTime(float Hour)
+{
+	if (UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz->SetHour(Hour);
 }
 
 void ATSSPlayerController::TSSTruck()
@@ -318,6 +363,7 @@ void ATSSPlayerController::TSSCustomerTest()
 		TWeakObjectPtr<ATSSCustomer> Customer;
 		int32 Money0 = 0, Served0 = 0, Lost0 = 0, Cash0 = 0, Card0 = 0, Tax0 = 0, Txns0 = 0;
 		int32 ExpectedTotal = 0, ExpectedSub = 0;
+		int32 Rings0 = 0;
 		float Hold = 0.f;      // wait before the next action (lets a screenshot happen)
 		float Elapsed = 0.f;   // time in the current step
 		int32 Fails = 0;
@@ -373,7 +419,7 @@ void ATSSPlayerController::TSSCustomerTest()
 
 	ATSSShopDoor* ShopDoor = nullptr;
 	for (TActorIterator<ATSSShopDoor> DIt(GetWorld()); DIt; ++DIt) { ShopDoor = *DIt; break; }
-	if (ShopDoor) ShopDoor->ConsumePeakAngle();
+	if (ShopDoor) { ShopDoor->ConsumePeakAngle(); St->Rings0 = ShopDoor->GetRingCount(); }
 
 	Spawn(ETSSPayMethod::Cash);
 	Check(TEXT("a customer spawns at the door"), St->Customer.IsValid());
@@ -398,6 +444,7 @@ void ATSSPlayerController::TSSCustomerTest()
 					if (ShopDoor && bCash)
 					{
 						Check(TEXT("the door swung open for the customer walking in"), ShopDoor->ConsumePeakAngle() < -30.f);
+						Check(TEXT("the bell rang as the customer walked in"), ShopDoor->GetRingCount() > St->Rings0);
 						Check(TEXT("and shut again behind them"), ShopDoor->GetAngle() > -5.f && !ShopDoor->IsHeldOpen());
 					}
 					const TArray<TObjectPtr<ATSSProductItem>>& Items = Reg->GetItems();
@@ -553,9 +600,12 @@ void ATSSPlayerController::TSSDeskTest()
 		float Elapsed = 0.f;
 		int32 Fails = 0;
 		int32 OrderId = 0;
+		TWeakObjectPtr<ATSSShopDoor> Door;
+		int32 Rings0 = 0;
 		int32 XP0 = 0;
 	};
 	TSharedRef<FState> St = MakeShared<FState>();
+	for (TActorIterator<ATSSShopDoor> DIt(GetWorld()); DIt; ++DIt) { St->Door = *DIt; St->Rings0 = DIt->GetRingCount(); break; }
 
 	UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
 	UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>();
@@ -691,6 +741,7 @@ void ATSSPlayerController::TSSDeskTest()
 			}
 			ConsoleCommand(TEXT("TSSLook 850 200 150 0 -6")); // a look at the parked truck on the road
 			Snap();
+			if (St->Door.IsValid()) Check(TEXT("the bell rang as the delivery driver walked in"), St->Door->GetRingCount() > St->Rings0);
 			TArray<ATSSParcel*> Parcels;
 			for (TActorIterator<ATSSParcel> It(GetWorld()); It; ++It) Parcels.Add(*It);
 			Check(TEXT("one parcel per order line is waiting on the dock"), Parcels.Num() == 2);

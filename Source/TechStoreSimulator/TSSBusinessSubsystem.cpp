@@ -387,13 +387,31 @@ void UTSSBusinessSubsystem::ApplyUpgrade(FName Id)
 
 // ---- clock ----------------------------------------------------------------------------------------
 
+FString UTSSBusinessSubsystem::FormatClock(float Hour)
+{
+	int32 Minutes = FMath::FloorToInt(FMath::Fmod(Hour + 24.f, 24.f) * 60.f);
+	const int32 H24 = (Minutes / 60) % 24;
+	const int32 M = Minutes % 60;
+	const int32 H12 = (H24 % 12 == 0) ? 12 : (H24 % 12);
+	return FString::Printf(TEXT("%d:%02d %s"), H12, M, H24 < 12 ? TEXT("AM") : TEXT("PM"));
+}
+
+void UTSSBusinessSubsystem::SetHour(float Hour)
+{
+	const float Offset = StartHour / 24.f * DayLengthSeconds;
+	const int32 DayIndex = FMath::FloorToInt((SimSeconds + Offset) / DayLengthSeconds);
+	float NewSim = (DayIndex + FMath::Fmod(Hour + 24.f, 24.f) / 24.f) * DayLengthSeconds - Offset;
+	if (NewSim < 0.f) NewSim += DayLengthSeconds;
+	SimSeconds = NewSim;
+}
+
 void UTSSBusinessSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	if (!Store.IsValid() || Store->IsSimPaused()) return;
 
 	SimSeconds += DeltaTime;
-	const int32 NewDay = 1 + FMath::FloorToInt(SimSeconds / DayLengthSeconds);
+	const int32 NewDay = DayForSeconds(SimSeconds);
 	if (NewDay > Store->GetDay()) Store->StartDay(NewDay);
 
 	if (!bTruckActive)
