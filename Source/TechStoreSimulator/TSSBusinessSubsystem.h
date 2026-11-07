@@ -108,6 +108,14 @@ public:
 
 	// ---- upgrades -------------------------------------------------------------------------------
 	static const TArray<FTSSUpgradeDef>& UpgradeCatalog();
+	// ---- the store's name ------------------------------------------------------------------------
+	static constexpr int32 RenameCost = 500;     // dollars
+	static constexpr int32 MaxNameLength = 24;
+	const FString& GetStoreName() const { return StoreName; }
+	/** Checks a proposed name (trimmed, 1-24 characters, different from the current one, affordable). */
+	bool CanRenameStore(const FString& NewName, FString& Why) const;
+	/** Pays $500 and renames the shop: the sign, the receipts and the screens all follow. */
+	bool RenameStore(const FString& NewName, FString& Why);
 	bool HasUpgrade(FName Id) const { return Upgrades.Contains(Id); }
 	/** 0 = small shop, 1 = medium, 2 = full-size. Each store expansion upgrade adds one. */
 	int32 GetStoreStage() const { return (HasUpgrade(TEXT("store_1")) ? 1 : 0) + (HasUpgrade(TEXT("store_1")) && HasUpgrade(TEXT("store_2")) ? 1 : 0); }
@@ -204,6 +212,7 @@ private:
 	float DirtyTimer = 0.f;
 
 	FString SlotName;
+	FString StoreName = TEXT("Tech Store");
 	bool bSavingDisabled = false;   // set while resetting so closing the old level cannot write the old game back
 	bool bTruckActive = false;
 	float AutosaveTimer = 0.f;

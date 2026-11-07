@@ -50,6 +50,7 @@ UPROPERTY() int32 Money = 100000;   // cents (see Version)
 	// Back room, staff, deals, and the money that went on them
 	UPROPERTY() TArray<FTSSOrderLine> Storage;
 	UPROPERTY() bool bCashierHired = false;
+	UPROPERTY() FString StoreName = TEXT("Tech Store");
 	UPROPERTY() TArray<FTSSActiveContract> Contracts;
 	UPROPERTY() int32 WageSpend = 0;
 	UPROPERTY() int32 ContractSpend = 0;

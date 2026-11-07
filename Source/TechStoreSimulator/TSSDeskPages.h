@@ -45,6 +45,7 @@ struct FTSSDeskContext
 	// UI-only state that should survive a page rebuild
 	TMap<ETSSProduct, int32> Cart;
 	ETSSProduct Selected = ETSSProduct::Phone;
+	FString NameDraft;   // what is typed in the rename box (survives page rebuilds)
 	FString Message;
 	bool bMessageIsError = false;
 

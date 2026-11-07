@@ -10,6 +10,7 @@
 #include "Styling/SlateBrush.h"
 #include "Styling/SlateTypes.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
@@ -264,7 +265,7 @@ public:
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)
 				[
 					DskPanel(SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()[ DskTxt(TEXT("Your Tech Store"), 24, true, Th().Heading) ]
+						+ SVerticalBox::Slot().AutoHeight()[ DskTxt(C.Biz->GetStoreName(), 24, true, Th().Heading) ]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 4.f)[ DskRow2(FString::Printf(TEXT("Business level %d"), D.Level), FString::Printf(TEXT("%d XP total"), D.XP), true) ]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)[ DskBar(D.XPForNextLevel > 0 ? float(D.XPIntoLevel) / D.XPForNextLevel : 1.f, Th().Heading) ]
 						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Lifetime earnings"), DskMoney(D.LifetimeRevenue)) ]
@@ -514,6 +515,45 @@ public:
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()[ DskHeading(TEXT("Store Management")) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)
+				[
+					DskPanel(SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[ DskRow2(TEXT("Store name"), C.Biz->GetStoreName(), true) ]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 6.f)
+						[
+							DskWrapped(FString::Printf(TEXT("Rename your shop for %s. The sign over the door, the receipts and the register screens change straight away."), *DskMoney(UTSSBusinessSubsystem::RenameCost)), 13, Th().Dim)
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
+							[
+								SNew(SEditableTextBox)
+								.Text(FText::FromString(C.NameDraft))
+								.HintText(FText::FromString(TEXT("New store name (up to 24 characters)")))
+								.Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+								.OnTextChanged_Lambda([Ctx](const FText& T)
+								{
+									Ctx->NameDraft = T.ToString().Left(UTSSBusinessSubsystem::MaxNameLength);
+								})
+								.OnTextCommitted_Lambda([Ctx](const FText& T, ETextCommit::Type)
+								{
+									Ctx->NameDraft = T.ToString().Left(UTSSBusinessSubsystem::MaxNameLength);
+								})
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								DskButton(FString::Printf(TEXT("RENAME  %s"), *DskMoney(UTSSBusinessSubsystem::RenameCost)), [Ctx]()
+								{
+									FString Msg;
+									Ctx->bMessageIsError = !Ctx->Biz->RenameStore(Ctx->NameDraft, Msg);
+									if (!Ctx->bMessageIsError) Ctx->NameDraft.Reset();
+									Ctx->Message = Msg;
+									Ctx->Refresh();
+								}, true)
+							]
+						])
+				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)
 				[
 					DskPanel(SNew(SVerticalBox)

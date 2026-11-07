@@ -200,6 +200,7 @@ void ATSSStoreShell::BeginPlay()
 	if (!Biz) return;
 	BizHandle = Biz->OnChanged.AddUObject(this, &ATSSStoreShell::OnBusinessChanged);
 	ApplyStage(Biz->GetStoreStage(), true);
+	ShowStoreName(Biz->GetStoreName());
 }
 
 void ATSSStoreShell::EndPlay(const EEndPlayReason::Type Reason)
@@ -216,5 +217,15 @@ void ATSSStoreShell::OnBusinessChanged()
 	if (UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>())
 	{
 		if (Biz->GetStoreStage() != CurrentStage) ApplyStage(Biz->GetStoreStage(), false);
+		ShowStoreName(Biz->GetStoreName());
 	}
+}
+
+void ATSSStoreShell::ShowStoreName(const FString& Name)
+{
+	if (!SignText) return;
+	const FString Upper = Name.ToUpper();
+	if (SignText->Text.ToString() == Upper) return;
+	SignText->SetText(FText::FromString(Upper));
+	SignText->SetWorldSize(FMath::Min(34.f, 300.f / (FMath::Max(Upper.Len(), 1) * 0.62f)));   // long names shrink to fit the board
 }

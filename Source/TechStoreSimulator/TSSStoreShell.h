@@ -37,6 +37,8 @@ private:
 	UStaticMeshComponent* Box(const TCHAR* Name, FLinearColor Color, bool bCollide = true);
 	void Layout(int32 Stage);
 	void OnBusinessChanged();
+	/** The sign over the door reads the store's name, sized to fit the board. */
+	void ShowStoreName(const FString& Name);
 
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
 	UPROPERTY() TObjectPtr<class UPointLightComponent> SignLight;

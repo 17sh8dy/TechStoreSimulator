@@ -113,7 +113,7 @@ void UTSSBusinessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	// The automated test works on a throwaway slot, so it can never touch a real save.
 	// -TSSStreetShots (the screenshot helper) moves the clock around, so it must never touch a real save either.
-	const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest")) || FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSTownShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSDoorShots"));
+	const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest")) || FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSTownShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSDoorShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSPayShots"));
 	SlotName = bTest ? TEXT("TSSAutoTest") : TEXT("TSSBusiness");
 	if (bTest) UGameplayStatics::DeleteGameInSlot(SlotName, 0);
 
@@ -131,6 +131,7 @@ void UTSSBusinessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		Storage = Save->Storage;
 		bCashierHired = Save->bCashierHired;
 		Contracts = Save->Contracts;
+		if (!Save->StoreName.IsEmpty()) StoreName = Save->StoreName;
 		// Parcels are not saved: an order that had already arrived is simply re-delivered.
 		for (FTSSOrder& O : Orders)
 		{
@@ -274,6 +275,7 @@ void UTSSBusinessSubsystem::SaveNow()
 	Save->Storage = Storage;
 	Save->bCashierHired = bCashierHired;
 	Save->Contracts = Contracts;
+	Save->StoreName = StoreName;
 	if (!bShelvesRestored)
 	{
 		Save->ShelfStock = LoadedShelfStock;   // the shelves are not back yet: do not overwrite the saved stock with empty ones
@@ -474,6 +476,28 @@ bool UTSSBusinessSubsystem::CanBuyUpgrade(const FTSSUpgradeDef& Def, FString& Wh
 	if (GetLevel() < Def.MinLevel) { Why = FString::Printf(TEXT("Requires business level %d."), Def.MinLevel); return false; }
 	if (GetStoreStage() < Def.MinStage) { Why = FString::Printf(TEXT("Needs a bigger store first (%s)."), TSSStoreLayout::StageName(Def.MinStage)); return false; }
 	if (!Store.IsValid() || Store->GetMoney() < Def.Cost) { Why = FString::Printf(TEXT("Costs $%d."), Def.Cost); return false; }
+	return true;
+}
+
+bool UTSSBusinessSubsystem::CanRenameStore(const FString& NewName, FString& Why) const
+{
+	const FString Name = NewName.TrimStartAndEnd();
+	if (Name.IsEmpty()) { Why = TEXT("Type a name first."); return false; }
+	if (Name.Len() > MaxNameLength) { Why = FString::Printf(TEXT("Names can be up to %d characters."), MaxNameLength); return false; }
+	if (Name == StoreName) { Why = TEXT("That is already the store's name."); return false; }
+	if (!Store.IsValid() || Store->GetMoney() < RenameCost * 100) { Why = FString::Printf(TEXT("Renaming costs $%d."), RenameCost); return false; }
+	return true;
+}
+
+bool UTSSBusinessSubsystem::RenameStore(const FString& NewName, FString& Why)
+{
+	if (!CanRenameStore(NewName, Why)) return false;
+	if (!Store->TrySpend(RenameCost)) { Why = TEXT("Not enough money."); return false; }
+	Store->NoteUpgradeSpend(RenameCost);
+	StoreName = NewName.TrimStartAndEnd();
+	SaveNow();
+	OnChanged.Broadcast();
+	Why = FString::Printf(TEXT("Your store is now called \"%s\"."), *StoreName);
 	return true;
 }
 
