@@ -70,6 +70,24 @@ void ATSSPlayerController::BeginPlay()
 			}, 1.5f, false);
 		}
 
+		// `-TSSDoorShots`: photographs the shop door from outside and inside, then quits.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSDoorShots")))
+		{
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, [this]()
+			{
+				TSSStart();
+				auto At = [this](float Delay, FString Cmd)
+				{
+					FTimerHandle T;
+					GetWorldTimerManager().SetTimer(T, [this, Cmd]() { ConsoleCommand(Cmd); }, Delay, false);
+				};
+				At(0.5f, TEXT("TSSLook 950 0 140 180 0"));  At(1.8f, TEXT("Shot ShowUI"));
+				At(2.4f, TEXT("TSSLook 560 0 140 0 0"));    At(3.7f, TEXT("Shot ShowUI"));
+				At(4.3f, TEXT("TSSLook 900 -120 150 150 0")); At(5.6f, TEXT("Shot ShowUI"));
+				At(6.5f, TEXT("QUIT_EDITOR"));
+			}, 1.0f, false);
+		}
 		// `-TSSStreetShots`: sends a truck down the road and photographs it, then quits (for looking at the street).
 	if (FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")))
 	{
@@ -229,7 +247,7 @@ void ATSSPlayerController::PlayerTick(float DeltaTime)
 				EKeys::GetAllKeys(All);
 				for (const FKey& K : All)
 				{
-					if (K.IsGamepadKey() || K.IsTouch() || K.IsAxis1D() || K.IsAxis2D() || K.IsAxis3D() || K == EKeys::LeftMouseButton || K == EKeys::MouseScrollUp || K == EKeys::MouseScrollDown) continue;
+					if (K == EKeys::AnyKey || !K.IsValid() || K.IsGamepadKey() || K.IsTouch() || K.IsAxis1D() || K.IsAxis2D() || K.IsAxis3D() || K == EKeys::LeftMouseButton || K == EKeys::MouseScrollUp || K == EKeys::MouseScrollDown) continue;
 					if (K == EKeys::Tab || K == EKeys::W || K == EKeys::A || K == EKeys::S || K == EKeys::D || K == EKeys::E) continue;   // used for other things
 					if (WasInputKeyJustPressed(K)) { Cfg->SetSprintKey(K); break; }
 				}

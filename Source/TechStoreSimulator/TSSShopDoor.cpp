@@ -33,7 +33,6 @@ namespace
 	constexpr float WatchHeight = 150.f;
 
 	const FLinearColor LeafColor(0.10f, 0.13f, 0.22f);
-	const FLinearColor GlassColor(0.42f, 0.58f, 0.68f);
 	const FLinearColor MetalColor(0.78f, 0.79f, 0.82f);
 	const FLinearColor FrameColor(0.06f, 0.07f, 0.1f);
 	const FLinearColor OpenPlate(0.04f, 0.46f, 0.16f);
@@ -80,15 +79,31 @@ ATSSShopDoor::ATSSShopDoor()
 	Hinge->SetupAttachment(Root);
 	Hinge->SetRelativeLocation(FVector(LeafX, HingeY, 0.f));
 
-	Leaf = Part(TEXT("Leaf"), Hinge, FVector(0.f, LeafWidth * 0.5f, LeafBottom + LeafHeight * 0.5f), FVector(LeafThick, LeafWidth, LeafHeight), LeafColor, true);
+	// The leaf is four slabs round a real window opening (you can see through it): bottom, top, and a strip either side.
+	constexpr float WinZ = LeafBottom + 160.f;       // window centre height
+	constexpr float WinHalfH = 37.f;                 // opening half-height (frame included)
+	constexpr float WinHalfW = 36.f;                 // opening half-width (frame included)
+	constexpr float WinBottom = WinZ - WinHalfH;
+	constexpr float WinTop = WinZ + WinHalfH;
+	constexpr float LeafTop = LeafBottom + LeafHeight;
+	constexpr float SideW = LeafWidth * 0.5f - WinHalfW;
+	Leaf = Part(TEXT("Leaf"), Hinge, FVector(0.f, LeafWidth * 0.5f, (LeafBottom + WinBottom) * 0.5f), FVector(LeafThick, LeafWidth, WinBottom - LeafBottom), LeafColor, true);
+	Part(TEXT("LeafTop"), Hinge, FVector(0.f, LeafWidth * 0.5f, (WinTop + LeafTop) * 0.5f), FVector(LeafThick, LeafWidth, LeafTop - WinTop), LeafColor, true);
+	Part(TEXT("LeafHingeSide"), Hinge, FVector(0.f, SideW * 0.5f, WinZ), FVector(LeafThick, SideW, 2.f * WinHalfH), LeafColor, true);
+	Part(TEXT("LeafLatchSide"), Hinge, FVector(0.f, LeafWidth - SideW * 0.5f, WinZ), FVector(LeafThick, SideW, 2.f * WinHalfH), LeafColor, true);
 	// Everything on the door hangs off the hinge (not the leaf), so it is not squashed by the leaf's scale.
 	auto OnLeaf = [this](const TCHAR* Name, FVector Loc, FVector Size, FLinearColor Color, bool bCylinder = false)
 	{
 		return Part(Name, Hinge, Loc, Size, Color, false, bCylinder);
 	};
 	const float Zc = LeafBottom; // heights below are from the floor
-	OnLeaf(TEXT("WindowFrame"), FVector(0.f, LeafWidth * 0.5f, Zc + 160.f), FVector(LeafThick + 0.6f, 72.f, 74.f), FrameColor);
-	OnLeaf(TEXT("Window"), FVector(0.f, LeafWidth * 0.5f, Zc + 160.f), FVector(LeafThick + 1.2f, 66.f, 68.f), GlassColor);
+	// Window trim round the opening (an open frame, so the shop and the street can be seen through it) and a cross bar.
+	const float WinY = LeafWidth * 0.5f;
+	OnLeaf(TEXT("WindowTrimBottom"), FVector(0.f, WinY, WinZ - WinHalfH + 3.f), FVector(LeafThick + 0.8f, 2.f * WinHalfW, 6.f), FrameColor);
+	OnLeaf(TEXT("WindowTrimTop"), FVector(0.f, WinY, WinZ + WinHalfH - 3.f), FVector(LeafThick + 0.8f, 2.f * WinHalfW, 6.f), FrameColor);
+	OnLeaf(TEXT("WindowTrimHinge"), FVector(0.f, WinY - WinHalfW + 3.f, WinZ), FVector(LeafThick + 0.8f, 6.f, 2.f * WinHalfH - 12.f), FrameColor);
+	OnLeaf(TEXT("WindowTrimLatch"), FVector(0.f, WinY + WinHalfW - 3.f, WinZ), FVector(LeafThick + 0.8f, 6.f, 2.f * WinHalfH - 12.f), FrameColor);
+	OnLeaf(TEXT("WindowMullion"), FVector(0.f, WinY, WinZ), FVector(LeafThick + 0.6f, 2.5f, 2.f * WinHalfH - 12.f), FrameColor);
 
 	// Handles on both faces, near the latch edge: a vertical bar on two posts.
 	const float HandleY = LeafWidth - 14.f;
@@ -102,8 +117,9 @@ ATSSShopDoor::ATSSShopDoor()
 	}
 	OnLeaf(TEXT("Latch"), FVector(0.f, LeafWidth + 0.5f, Zc + 100.f), FVector(LeafThick - 1.f, 2.f, 10.f), MetalColor);
 
+	const float SignZ = (WinTop + LeafTop) * 0.5f;   // centred in the solid panel above the window
 	// The sign: a plate through the door, so it reads from outside and from inside. Flip it with E.
-	SignPlate = OnLeaf(TEXT("SignPlate"), FVector(0.f, LeafWidth * 0.42f, Zc + 112.f), FVector(LeafThick + 3.f, 34.f, 20.f), OpenPlate);
+	SignPlate = OnLeaf(TEXT("SignPlate"), FVector(0.f, LeafWidth * 0.5f, SignZ), FVector(LeafThick + 3.f, 34.f, 20.f), OpenPlate);
 	SignPlate->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	SignPlate->SetCollisionResponseToAllChannels(ECR_Ignore);
 	SignPlate->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block); // only the player's look-trace sees it
@@ -112,7 +128,7 @@ ATSSShopDoor::ATSSShopDoor()
 	{
 		UTextRenderComponent* T = CreateDefaultSubobject<UTextRenderComponent>(Name);
 		T->SetupAttachment(Hinge);
-		T->SetRelativeLocation(FVector(XSign * ((LeafThick + 3.f) * 0.5f + 0.25f), LeafWidth * 0.42f, 2.f + 112.f));
+		T->SetRelativeLocation(FVector(XSign * ((LeafThick + 3.f) * 0.5f + 0.25f), LeafWidth * 0.5f, SignZ));
 		T->SetRelativeRotation(FRotator(0.f, XSign > 0.f ? 0.f : 180.f, 0.f));
 		T->SetWorldSize(9.f);
 		T->SetHorizontalAlignment(EHTA_Center);

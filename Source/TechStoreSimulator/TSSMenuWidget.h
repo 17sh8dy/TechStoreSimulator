@@ -52,9 +52,11 @@ private:
 	FReply OnContinue();
 	FReply OnResume();
 	FReply OnBack();
+	FReply OnResetSave();
 
 	TSharedPtr<SBox> Content;
 	ETSSMenuPage Page = ETSSMenuPage::Main;
 	ETSSMenuPage SettingsReturnPage = ETSSMenuPage::Main;
+	bool bConfirmReset = false;
 	ETSSViewMode PendingMode = ETSSViewMode::FirstPerson;
 };

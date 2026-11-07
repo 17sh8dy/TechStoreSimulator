@@ -1,5 +1,7 @@
 #include "TSSMenuWidget.h"
 #include "TSSPlayerController.h"
+#include "TSSBusinessSubsystem.h"
+#include "Engine/World.h"
 #include "Engine/GameInstance.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
@@ -58,6 +60,7 @@ void UTSSMenuWidget::ReleaseSlateResources(bool bReleaseChildren)
 void UTSSMenuWidget::SetPage(ETSSMenuPage NewPage)
 {
 	Page = NewPage;
+	bConfirmReset = false;
 	if (!Content.IsValid()) return;
 	switch (Page)
 	{
@@ -109,6 +112,19 @@ FReply UTSSMenuWidget::OnContinue()
 FReply UTSSMenuWidget::OnResume()
 {
 	if (ATSSPlayerController* PC = Cast<ATSSPlayerController>(GetOwningPlayer())) PC->ResumeGame();
+	return FReply::Handled();
+}
+
+FReply UTSSMenuWidget::OnResetSave()
+{
+	if (!bConfirmReset)
+	{
+		bConfirmReset = true;
+		Content->SetContent(BuildSettings());   // same page, button now asks for confirmation
+		return FReply::Handled();
+	}
+	if (UWorld* W = GetWorld())
+		if (UTSSBusinessSubsystem* Biz = W->GetSubsystem<UTSSBusinessSubsystem>()) Biz->ResetSaveAndRestart();
 	return FReply::Handled();
 }
 
@@ -313,6 +329,11 @@ TSharedRef<SWidget> UTSSMenuWidget::BuildSettings()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)[ FovRow(TEXT("Third Person FOV"), ETSSViewMode::ThirdPerson) ]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 24, 0, 10)[ MenuLabel(TEXT("CONTROLS"), 18, true, MenuAccent) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)[ SprintRow() ]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 24, 0, 10)[ MenuLabel(TEXT("SAVED GAME"), 18, true, MenuAccent) ]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 6)
+		[
+			MenuButton(bConfirmReset ? TEXT("CLICK AGAIN: ERASE EVERYTHING") : TEXT("RESET SAVE (start over, $1,000)"), FOnClicked::CreateUObject(this, &UTSSMenuWidget::OnResetSave), 420.f)
+		]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 28, 0, 0)[ MenuButton(TEXT("BACK"), FOnClicked::CreateUObject(this, &UTSSMenuWidget::OnBack)) ];
 }
 

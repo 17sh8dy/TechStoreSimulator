@@ -75,7 +75,7 @@ private:
 	TMap<TWeakObjectPtr<AActor>, bool> WasOutside;   // per walker: was it outdoors last frame?
 	int32 Rings = 0;
 	float RingTime = 99.f;
-	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
+	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> Parts;
 	TArray<FLinearColor> PartColors;
 
 	float CurrentAngle = 0.f;

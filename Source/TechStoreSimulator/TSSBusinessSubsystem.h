@@ -157,6 +157,8 @@ public:
 
 	// ---- persistence ----------------------------------------------------------------------------
 	void SaveNow();
+	/** Erases the saved game (cash, stock, upgrades, everything) and reloads the level, so the next start is a fresh $1,000 store. */
+	void ResetSaveAndRestart();
 	/** The slot in use: the real one, or a throwaway one while running the automated test. */
 	const FString& GetSlotName() const { return SlotName; }
 
@@ -202,6 +204,7 @@ private:
 	float DirtyTimer = 0.f;
 
 	FString SlotName;
+	bool bSavingDisabled = false;   // set while resetting so closing the old level cannot write the old game back
 	bool bTruckActive = false;
 	float AutosaveTimer = 0.f;
 	TWeakObjectPtr<UTSSStoreSubsystem> Store;

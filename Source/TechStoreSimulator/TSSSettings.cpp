@@ -38,13 +38,13 @@ void UTSSSettingsSubsystem::SetFOV(ETSSViewMode Mode, float FOV)
 
 FKey UTSSSettingsSubsystem::GetSprintKey() const
 {
-	return Data->SprintKey.IsValid() ? Data->SprintKey : FKey(FName(TEXT("LeftShift")));
+	return (Data->SprintKey.IsValid() && Data->SprintKey != EKeys::AnyKey) ? Data->SprintKey : FKey(FName(TEXT("LeftShift")));
 }
 
 void UTSSSettingsSubsystem::SetSprintKey(FKey Key, bool bPersist)
 {
 	bAwaitingSprint = false;
-	if (!Key.IsValid()) Key = FKey(FName(TEXT("LeftShift")));
+	if (!Key.IsValid() || Key == EKeys::AnyKey) Key = FKey(FName(TEXT("LeftShift")));
 	Data->SprintKey = Key;
 	if (bPersist) Save();
 	OnChanged.Broadcast();

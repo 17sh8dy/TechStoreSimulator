@@ -113,7 +113,7 @@ void UTSSBusinessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	// The automated test works on a throwaway slot, so it can never touch a real save.
 	// -TSSStreetShots (the screenshot helper) moves the clock around, so it must never touch a real save either.
-	const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest")) || FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots"));
+	const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest")) || FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSTownShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSDoorShots"));
 	SlotName = bTest ? TEXT("TSSAutoTest") : TEXT("TSSBusiness");
 	if (bTest) UGameplayStatics::DeleteGameInSlot(SlotName, 0);
 
@@ -252,9 +252,16 @@ void UTSSBusinessSubsystem::HandleStoreChanged()
 	OnChanged.Broadcast();
 }
 
+void UTSSBusinessSubsystem::ResetSaveAndRestart()
+{
+	bSavingDisabled = true;
+	UGameplayStatics::DeleteGameInSlot(SlotName, 0);
+	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)));
+}
+
 void UTSSBusinessSubsystem::SaveNow()
 {
-	if (!Store.IsValid()) return;
+	if (!Store.IsValid() || bSavingDisabled) return;
 	UTSSBusinessSave* Save = Cast<UTSSBusinessSave>(UGameplayStatics::CreateSaveGameObject(UTSSBusinessSave::StaticClass()));
 	Store->ExportTo(Save);
 	Save->XP = XP;
