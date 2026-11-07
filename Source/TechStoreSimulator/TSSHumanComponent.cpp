@@ -131,6 +131,16 @@ void UTSSHumanComponent::LookAt(const FVector& WorldTarget)
 	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetLook(true, WorldTarget);
 }
 
+void UTSSHumanComponent::SetLean(float Degrees)
+{
+	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetLean(Degrees);
+}
+
+void UTSSHumanComponent::SetPointing(ETSSHand Hand, bool bOn)
+{
+	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetPointing(Hand, bOn);
+}
+
 void UTSSHumanComponent::StopLooking()
 {
 	if (UTSSHumanAnimInstance* A = AnimInst()) A->SetLook(false, FVector::ZeroVector);

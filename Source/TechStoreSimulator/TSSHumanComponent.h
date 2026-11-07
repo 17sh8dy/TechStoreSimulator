@@ -35,6 +35,10 @@ public:
 	bool IsReachSettled(ETSSHand Hand, float Threshold = 0.9f) const { return ReachAlpha(Hand) >= Threshold; }
 	bool IsRelaxed(ETSSHand Hand) const { return ReachAlpha(Hand) <= 0.05f; }
 	void LookAt(const FVector& WorldTarget);
+	/** Bend forward from the waist (degrees; 0 = upright). Eases in and out. */
+	void SetLean(float Degrees);
+	/** Fingers curled with the index out, to press keys. */
+	void SetPointing(ETSSHand Hand, bool bOn);
 	void StopLooking();
 	/** Where the hand actually is right now (a held product follows this). */
 	FVector GetHandWorldLocation(ETSSHand Hand) const;

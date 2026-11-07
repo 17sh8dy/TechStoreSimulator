@@ -26,6 +26,8 @@ struct FTSSHumanAnimData
 	FTSSReachChannel Reach[2];
 	float LookAlpha = 0.f;
 	FVector LookTarget = FVector::ZeroVector;
+	float LeanDegrees = 0.f;    // how far the body is bent forward from the waist right now
+	float Point[2] = { 0.f, 0.f };   // 0..1: hand curled with the index finger out, for pressing keys
 	FTransform ComponentToWorld;
 };
 
@@ -50,6 +52,10 @@ public:
 	void SetSpeed(float InSpeed) { TargetSpeed = InSpeed; }
 	void SetReach(ETSSHand Hand, bool bActive, const FVector& WorldTarget, float BlendSeconds);
 	void SetLook(bool bActive, const FVector& WorldTarget);
+	/** Bend forward from the waist by this many degrees (0 stands up straight). */
+	void SetLean(float Degrees) { LeanTarget = Degrees; }
+	/** Curl the fingers except the index, which points, so the hand can press keys. */
+	void SetPointing(ETSSHand Hand, bool bOn) { PointTarget[static_cast<int32>(Hand)] = bOn ? 1.f : 0.f; }
 	float GetReachAlpha(ETSSHand Hand) const { return Data.Reach[static_cast<int32>(Hand)].Alpha; }
 	bool IsReaching(ETSSHand Hand) const { return Data.Reach[static_cast<int32>(Hand)].bActive; }
 
@@ -61,6 +67,8 @@ public:
 
 private:
 	float TargetSpeed = 0.f;
+	float LeanTarget = 0.f;
+	float PointTarget[2] = { 0.f, 0.f };
 	float Speed = 0.f;
 	bool bLookActive = false;
 };

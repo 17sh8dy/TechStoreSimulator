@@ -112,6 +112,10 @@ private:
 	void ShowHeld(UTSSProductBoxComponent* Mesh, bool bShow);
 	void FollowRightHand(UTSSProductBoxComponent* Mesh, float DepthCm);
 	void FollowCardInHand();
+	/** While the customer types their PIN: the index finger hops from key to key and presses each digit as the terminal registers it. */
+	void DrivePinTyping();
+	/** Hands the card back, straightens up, relaxes the fingers. */
+	void EndCardGestures();
 
 	// where the hands go
 	FVector ChestPoint(ETSSHand Hand) const;
@@ -148,6 +152,7 @@ UPROPERTY() TObjectPtr<UTextRenderComponent> Bubble;
 	TArray<FTSSBasketItem> Basket;
 	int32 WantCount = 1;
 	bool bForceCash = false;
+	float CardDipT = 0.f;   // 0..1: the card going down into the chip slot
 	/** Carrying something in the right hand: it is held at the chest between tasks. */
 	bool bCarrying = false;
 	bool bBagSeen = false;        // test latches: the carried plain bag was visible at some frame ...

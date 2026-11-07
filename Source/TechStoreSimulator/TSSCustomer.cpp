@@ -228,8 +228,49 @@ void ATSSCustomer::FollowCardInHand()
 	const ETSSCheckoutPhase P = Register->GetPhase();
 	const bool bAtTerminal = P == ETSSCheckoutPhase::CardTap || P == ETSSCheckoutPhase::CardPin || P == ETSSCheckoutPhase::CardReady
 		|| P == ETSSCheckoutPhase::CardProcessing || P == ETSSCheckoutPhase::CardResult;
-	const FVector At = bAtTerminal ? Register->TerminalTapPoint() : Human->GetHandWorldLocation(RHand) + FVector(0.f, 0.f, 1.5f);
-	CardProp->SetWorldLocationAndRotation(At, Register->GetActorRotation());
+	if (!bAtTerminal)
+	{
+		CardDipT = 0.f;
+		CardProp->SetWorldLocationAndRotation(Human->GetHandWorldLocation(RHand) + FVector(0.f, 0.f, 1.5f), Register->GetActorRotation());
+		return;
+	}
+	// At the terminal the card lies on the PIN pad and goes down into the chip slot.
+	CardDipT = FMath::Min(1.f, CardDipT + GetWorld()->GetDeltaSeconds() / 0.8f);
+	const float Down = FMath::InterpEaseInOut(0.f, 1.f, CardDipT, 2.f);
+	const FVector At = Register->TerminalTapPoint() + FVector(0.f, 0.f, 9.f * (1.f - Down)) - Register->GetActorForwardVector() * (6.f * (1.f - Down));
+	CardProp->SetWorldLocationAndRotation(At, (Register->GetActorQuat() * FQuat(FRotator(20.f, 0.f, 0.f))).Rotator());
+}
+
+void ATSSCustomer::DrivePinTyping()
+{
+	if (!Register) return;
+	const int32 Typed = Register->GetPinTyped();
+	auto Key = [this](int32 Index)
+	{
+		const int32 Digit = PayCard.Pin.IsValidIndex(Index) ? FMath::Clamp(int32(PayCard.Pin[Index]) - int32('0'), 0, 9) : 0;
+		return Register->TerminalKeyPoint(Digit);
+	};
+	const int32 Next = FMath::Min(Typed, 3);
+	const float P = Register->GetPinCycle();
+	const FVector From = Typed >= 4 ? Key(3) : (Typed > 0 ? Key(Typed - 1) : Register->TerminalTapPoint() + FVector(0.f, 0.f, 8.f));
+	const FVector To = Key(Next);
+	FVector Pos = FMath::Lerp(From, To, FMath::SmoothStep(0.f, 0.45f, P));
+	float Lift = 6.f * (1.f - FMath::SmoothStep(0.5f, 0.92f, P));   // finger up while it travels, down on the key at the end
+	if (Typed >= 4) Lift = 6.f;
+	if (Register->IsPinWrong()) { Lift = 13.f; Human->SetLean(14.f); }   // a pause: wrong PIN, back off and look again
+	else Human->SetLean(26.f);
+	Pos.Z += Lift;
+	// The wrist sits behind the fingertip (towards the customer) and a little above it.
+	Pos += Register->GetActorTransform().TransformVectorNoScale(FVector(-8.f, 0.f, 3.f));
+	Human->Reach(RHand, Pos, 0.09f);
+}
+
+void ATSSCustomer::EndCardGestures()
+{
+	CardProp->SetShown(false);
+	Human->SetPointing(RHand, false);
+	Human->SetLean(0.f);
+	Human->Relax(RHand, BlendSeconds());
 }
 
 void ATSSCustomer::FollowRightHand(UTSSProductBoxComponent* Mesh, float DepthCm)
@@ -430,7 +471,7 @@ void ATSSCustomer::PayNow(bool bInForceCash)
 {
 	bForceCash = bInForceCash;
 	FScript S;
-	S.Add(Do([this]() { ShowHeld(HandProp, false); Human->Relax(RHand, BlendSeconds()); }));
+	S.Add(Do([this]() { ShowHeld(HandProp, false); EndCardGestures(); }));
 	S.Add(Wait(0.8f));   // a moment to get the wallet out
 	S.Add(Do([this]() { BeginPaymentGestures(); }));
 	SetScript(MoveTemp(S));
@@ -446,23 +487,43 @@ void ATSSCustomer::BeginPaymentGestures()
 	{
 		S.Add(Do([this]() { Say(TEXT("Card, please."), 3.f); }));
 		S.Add(ReachTo(RHand, [this]() { return HipPoint(); }));
-S.Add(Do([this]()
+		S.Add(Do([this]()
 		{
 			// Their debit card: bank, number, expiry, name and a PIN, all invented. One in a few dozen has run out.
 			PayCard = TSSCards::Generate(Register->Today(), FMath::FRand() < Register->ExpiredCardChance);
 			CardProp->SetCard(PayCard);
 			CardProp->SetShown(true);
+			CardDipT = 0.f;
 		}));
 		S.Add(Wait(0.2f));
-		S.Add(ReachTo(RHand, [this]() { return Register->TerminalTapPoint(); }));
-S.Add(Do([this]() { Register->CustomerPresentsCard(PayCard); }));
-		// Hold the card to the terminal until the payment has gone through (or been declined).
+		// Step up to the PIN pad: lean in, hold the card over the slot, then push it down into the chip reader.
+		const auto Slot = [this]() { return Register->TerminalTapPoint() - Register->GetActorForwardVector() * 3.f + FVector(0.f, 0.f, 1.f); };
+		S.Add(Do([this]() { Human->SetLean(14.f); }));
+		S.Add(ReachTo(RHand, [this, Slot]() { return Slot() + FVector(0.f, 0.f, 10.f); }));
+		S.Add(Do([this]() { Register->CustomerPresentsCard(PayCard); CardDipT = 0.f; }));
+		S.Add(ReachTo(RHand, Slot));
+		S.Add(WaitFor([this]() { return Register->GetPhase() != ETSSCheckoutPhase::CardTap; }, 30.f));
+		// Chip and PIN: bend over the pad and type the four digits with the index finger.
+		S.Add(Do([this]()
+		{
+			if (Register->GetPhase() == ETSSCheckoutPhase::CardPin) { Human->SetPointing(RHand, true); Human->SetLean(26.f); }
+		}));
+		S.Add(WaitFor([this]()
+		{
+			if (Register->GetPhase() != ETSSCheckoutPhase::CardPin) return true;
+			DrivePinTyping();
+			return false;
+		}, 120.f));
+		S.Add(Do([this]() { Human->SetPointing(RHand, false); Human->SetLean(10.f); }));
+		// Wait for the owner to process the payment (or for it to be declined), then take the card back.
 		S.Add(WaitFor([this]()
 		{
 			const ETSSCheckoutPhase P = Register->GetPhase();
-			return !(P == ETSSCheckoutPhase::CardTap || P == ETSSCheckoutPhase::CardPin || P == ETSSCheckoutPhase::CardReady ||P == ETSSCheckoutPhase::CardProcessing || P == ETSSCheckoutPhase::CardResult);
-			}, 240.f));   // a busy owner can take a while to press the terminal
-S.Add(Do([this]() { CardProp->SetShown(false); Human->Relax(RHand, BlendSeconds()); }));
+			return !(P == ETSSCheckoutPhase::CardTap || P == ETSSCheckoutPhase::CardPin || P == ETSSCheckoutPhase::CardReady || P == ETSSCheckoutPhase::CardProcessing || P == ETSSCheckoutPhase::CardResult);
+		}, 240.f));   // a busy owner can take a while to press the terminal
+		S.Add(ReachTo(RHand, [this, Slot]() { return Slot(); }));
+		S.Add(ReachTo(RHand, [this]() { return HipPoint(); }));
+		S.Add(Do([this]() { EndCardGestures(); }));
 	}
 	else
 	{

@@ -11,6 +11,7 @@
 
 namespace
 {
+	float FingerSign = 1.f;   // which way the finger bones curl (tuned by eye)
 	constexpr float WalkNominalSpeed = 140.f;   // the in-place walk looks right at this ground speed
 	constexpr float RunNominalSpeed = 239.f;    // the quick-walk clip travels 406 cm in 1.7 s
 
@@ -72,13 +73,34 @@ struct FTSSHumanAnimProxy : public FAnimInstanceProxy
 
 		// ---- hands and head: procedural, in component space --------------------------------------------------------------------
 		const bool bAnyReach = Data.Reach[0].Alpha > 0.002f || Data.Reach[1].Alpha > 0.002f;
-		if (!bAnyReach && Data.LookAlpha < 0.002f) return true;
+		const bool bLean = FMath::Abs(Data.LeanDegrees) > 0.05f;
+		const bool bPoint = Data.Point[0] > 0.002f || Data.Point[1] > 0.002f;
+		if (!bAnyReach && Data.LookAlpha < 0.002f && !bLean && !bPoint) return true;
 
 		auto Index = [&BC](const TCHAR* Name) -> FCompactPoseBoneIndex
 		{
 			const int32 Mesh = BC.GetPoseBoneIndexForBoneName(FName(Name));
 			return Mesh == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : BC.MakeCompactPoseIndex(FMeshPoseBoneIndex(Mesh));
 		};
+
+		// ---- bend forward from the waist: the lean is shared out along the spine, each bone turning about the body's side-to-side axis ----
+		if (bLean)
+		{
+			static const TCHAR* Spine[4] = { TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03"), TEXT("spine_04") };
+			static const float Share[4] = { 0.30f, 0.30f, 0.25f, 0.15f };
+			for (int32 i = 0; i < 4; ++i)
+			{
+				const FCompactPoseBoneIndex B = Index(Spine[i]);
+				if (B == INDEX_NONE) continue;
+				const FCompactPoseBoneIndex P = BC.GetParentBoneIndex(B);
+				if (P == INDEX_NONE) continue;
+				FCSPose<FCompactPose> Tmp;
+				Tmp.InitPose(Output.Pose);
+				const FQuat Bend(FVector(1.f, 0.f, 0.f), -FMath::DegreesToRadians(Data.LeanDegrees * Share[i]));   // the body faces +Y: forward is about -X
+				const FQuat NewCS = Bend * Tmp.GetComponentSpaceTransform(B).GetRotation();
+				Output.Pose[B].SetRotation((Tmp.GetComponentSpaceTransform(P).GetRotation().Inverse() * NewCS).GetNormalized());
+			}
+		}
 
 		FCSPose<FCompactPose> CS;
 		CS.InitPose(Output.Pose);
@@ -134,6 +156,29 @@ struct FTSSHumanAnimProxy : public FAnimInstanceProxy
 		}
 
 		FCSPose<FCompactPose>::ConvertComponentPosesToLocalPoses(CS, Output.Pose);
+
+		// ---- fingers: a loose fist with the index finger out, to press keys ----------------------------------------------------------
+		for (int32 h = 0; h < 2; ++h)
+		{
+			if (Data.Point[h] <= 0.002f) continue;
+			const TCHAR* Side = h == 0 ? TEXT("r") : TEXT("l");
+			struct FCurl { const TCHAR* Name; float Deg; };
+			static const FCurl Curls[] = {
+				{ TEXT("middle_01"), 75.f }, { TEXT("middle_02"), 85.f }, { TEXT("middle_03"), 60.f },
+				{ TEXT("ring_01"), 80.f },   { TEXT("ring_02"), 85.f },   { TEXT("ring_03"), 60.f },
+				{ TEXT("pinky_01"), 85.f },  { TEXT("pinky_02"), 85.f },  { TEXT("pinky_03"), 60.f },
+				{ TEXT("thumb_01"), 18.f },  { TEXT("thumb_02"), 20.f },
+				{ TEXT("index_01"), 8.f },   { TEXT("index_02"), 4.f }
+			};
+			for (const FCurl& C : Curls)
+			{
+				const FCompactPoseBoneIndex B = Index(*FString::Printf(TEXT("%s_%s"), C.Name, Side));
+				if (B == INDEX_NONE) continue;
+				const FQuat Curl(FVector(0.f, 0.f, 1.f), FMath::DegreesToRadians(C.Deg * Data.Point[h]) * FingerSign);
+				Output.Pose[B].SetRotation((Output.Pose[B].GetRotation() * Curl).GetNormalized());
+			}
+		}
+
 		Output.Pose.NormalizeRotations();
 		return true;
 	}
@@ -200,5 +245,7 @@ void UTSSHumanAnimInstance::NativeUpdateAnimation(float Dt)
 		const float Step = Dt / R.BlendSeconds;
 		R.Alpha = R.bActive ? FMath::Min(1.f, R.Alpha + Step) : FMath::Max(0.f, R.Alpha - Step);
 	}
+	Data.LeanDegrees = FMath::FInterpTo(Data.LeanDegrees, LeanTarget, Dt, 5.f);
+	for (int32 h = 0; h < 2; ++h) Data.Point[h] = FMath::FInterpTo(Data.Point[h], PointTarget[h], Dt, 9.f);
 	Data.LookAlpha = bLookActive ? FMath::Min(1.f, Data.LookAlpha + Dt / 0.4f) : FMath::Max(0.f, Data.LookAlpha - Dt / 0.4f);
 }
