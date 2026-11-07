@@ -340,6 +340,16 @@ namespace
 	const FVector TermPos(-2.f, 55.f, DevTop);
 	const FVector CardFrom(-52.f, 55.f, DevTop + 26.f);
 	const FVector CardTo(3.f, 55.f, DevTop + 27.f);
+	// The customer-facing PIN pad: a small angled pad on the shop side of the counter, with a 3 x 4 key grid and a chip slot at its far edge.
+	const FVector PadPos(-30.f, 35.f, DevTop);
+	const FRotator PadTilt(20.f, 0.f, 0.f);
+	const FTransform PadPlate(PadTilt, PadPos + FVector(0.f, 0.f, 4.f));
+	FVector PadKeyLocal(int32 Digit)
+	{
+		const int32 Slot = Digit == 0 ? 10 : Digit - 1;   // 1-9 in three rows, then [ ] 0 [ ]
+		const int32 Row = Slot / 3, Col = Slot % 3;
+		return FVector(3.6f - 2.5f * Row, (Col - 1) * 2.8f, 0.9f);
+	}
 }
 
 ATSSCardTerminal::ATSSCardTerminal()
@@ -348,6 +358,14 @@ ATSSCardTerminal::ATSSCardTerminal()
 	Box(TEXT("Foot"), TermPos + FVector(0.f, 0.f, 1.f), FVector(14.f, 18.f, 2.f), DevDark);
 	Box(TEXT("Post"), TermPos + FVector(-1.f, 0.f, 6.f), FVector(4.f, 5.f, 8.f), DevDark);
 	Box(TEXT("Body"), TermPos + FVector(0.f, 0.f, 17.f), FVector(12.f, 11.f, 18.f), DevDark, FRotator(25.f, 0.f, 0.f));
+	// PIN pad
+	Box(TEXT("PadBase"), PadPos + FVector(0.f, 0.f, 1.6f), FVector(10.f, 12.f, 3.2f), DevDark);
+	Box(TEXT("PadPlate"), PadPos + FVector(0.f, 0.f, 4.f), FVector(9.f, 11.f, 1.2f), FLinearColor(0.05f, 0.06f, 0.08f), PadTilt);
+	Box(TEXT("PadSlot"), PadPlate.TransformPosition(FVector(5.0f, 0.f, 0.5f)), FVector(1.2f, 8.f, 0.4f), FLinearColor(0.f, 0.f, 0.f), PadTilt);
+	for (int32 d = 0; d < 10; ++d)
+	{
+		Box(*FString::Printf(TEXT("PadKey%d"), d), PadPlate.TransformPosition(PadKeyLocal(d)), FVector(2.0f, 2.2f, 0.5f), d == 0 ? FLinearColor(0.7f, 0.72f, 0.76f) : FLinearColor(0.46f, 0.48f, 0.52f), PadTilt);
+	}
 	Card = Box(TEXT("Card"), CardFrom, FVector(8.5f, 5.4f, 0.3f), FLinearColor(0.1f, 0.3f, 0.8f));
 	Card->SetVisibility(false);
 
@@ -367,7 +385,13 @@ void ATSSCardTerminal::BeginPlay()
 
 FVector ATSSCardTerminal::GetTapPoint() const
 {
-	return GetActorTransform().TransformPosition(CardTo + FVector(0.f, 0.f, 3.f));
+	// The chip slot at the far edge of the PIN pad (the card lies on the pad with its end in the slot).
+	return GetActorTransform().TransformPosition(PadPlate.TransformPosition(FVector(2.6f, 0.f, 1.4f)));
+}
+
+FVector ATSSCardTerminal::GetKeyPoint(int32 Digit) const
+{
+	return GetActorTransform().TransformPosition(PadPlate.TransformPosition(PadKeyLocal(FMath::Clamp(Digit, 0, 9)) + FVector(0.f, 0.f, 0.3f)));
 }
 
 void ATSSCardTerminal::Tick(float Dt)
@@ -392,8 +416,10 @@ void ATSSCardTerminal::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 namespace
 {
 	const FVector PrinterPos(28.f, -122.f, DevTop);
-constexpr float PaperLength = 30.f;
-	constexpr float PaperWidth = 15.f;
+	constexpr float PaperPxW = 340.f;
+	constexpr float PaperPxH = 760.f;
+	constexpr float PaperWidth = 16.f;                                  // cm
+	constexpr float PaperLength = PaperWidth * PaperPxH / PaperPxW;      // cm (about 36)
 }
 
 ATSSReceiptPrinter::ATSSReceiptPrinter()
@@ -402,38 +428,29 @@ ATSSReceiptPrinter::ATSSReceiptPrinter()
 	Box(TEXT("Body"), PrinterPos + FVector(0.f, 0.f, 6.f), FVector(14.f, 16.f, 12.f), DevDark);
 	Box(TEXT("Slot"), PrinterPos + FVector(0.f, 0.f, 12.2f), FVector(2.f, 9.f, 0.6f), FLinearColor(0.f, 0.f, 0.f));
 	Box(TEXT("Led"), PrinterPos + FVector(7.2f, 5.f, 8.f), FVector(0.6f, 1.5f, 1.5f), FLinearColor(0.1f, 0.9f, 0.3f));
-Paper = Box(TEXT("Paper"), PrinterPos + FVector(0.f, 0.f, 12.f), FVector(0.3f, PaperWidth, 0.1f), FLinearColor(0.97f, 0.97f, 0.94f));
+	// The paper slides up out of the slot; the part still inside the printer body is hidden by it.
+	Paper = CreateDefaultSubobject<UWidgetComponent>(TEXT("PaperSheet"));
+	Paper->SetupAttachment(GetRootComponent());
+	ConfigureScreen(Paper, UTSSReceiptWidget::StaticClass(), FIntPoint(int32(PaperPxW), int32(PaperPxH)), PaperWidth);
+	Paper->SetRelativeLocation(PrinterPos + FVector(0.f, 0.f, 12.f - PaperLength * 0.5f));
 	Paper->SetVisibility(false);
-	PaperText = Label(TEXT("PaperText"), PrinterPos + FVector(0.5f, 0.f, 12.f + PaperLength * 0.5f),FRotator::ZeroRotator, 0.9f, FColor(20, 20, 20));
-	PaperText->SetVisibility(false);
+}
+
+void ATSSReceiptPrinter::BeginPlay()
+{
+	Super::BeginPlay();
+	if (Paper) Paper->InitWidget(); // null on stale saved actors; was the 11/6 7:58 PM crash
 }
 
 void ATSSReceiptPrinter::Print(const FTSSTransaction& Sale, const TArray<FTSSSaleLine>& Lines)
 {
-	auto Money = [](int32 Cents) { return TSSMoney::Format(Cents); };
-	auto Pad = [](const FString& Left, const FString& Right) { return Left + TEXT("   ") + Right; };
-	FString Text = TEXT("TECH STORE\n100 Commerce Way\nHarbor City\n--------------------\n");
-	Text += FString::Printf(TEXT("%s  %s\nTrans #%d\n--------------------\n"), *UTSSBusinessSubsystem::FormatDate(Sale.Day), *UTSSBusinessSubsystem::FormatClock(Sale.TimeMinutes / 60.f), Sale.Id);
-	for (const FTSSSaleLine& L : Lines) Text += Pad(FString::Printf(TEXT("%dx %s"), L.Qty, TSSProductDef(L.Product).Name), Money(L.Total() * 100)) + TEXT("\n");
-	Text += TEXT("--------------------\n");
-	Text += Pad(TEXT("Subtotal"), Money(Sale.Subtotal)) + TEXT("\n");
-	Text += Pad(FString::Printf(TEXT("Tax %.2f%%"), TSSMoney::TaxRate * 100.f), Money(Sale.Tax)) + TEXT("\n");
-	Text += Pad(TEXT("TOTAL"), Money(Sale.Total)) + TEXT("\n--------------------\n");
-	if (Sale.Method == ETSSPayMethod::Cash)
-	{
-		Text += Pad(TEXT("CASH"), Money(Sale.CashReceived)) + TEXT("\n");
-		Text += Pad(TEXT("CHANGE"), Money(Sale.Change)) + TEXT("\n");
-	}
-	else
-	{
-		Text += FString::Printf(TEXT("%s DEBIT  ****%s\nAUTH %s\nAPPROVED  %s\n"), *Sale.CardNetwork, *Sale.CardLast4, *Sale.AuthCode, *Money(Sale.Total));
-	}
-	Text += TEXT("\nTHANK YOU!\nKeep this receipt for returns");
-	PaperText->SetText(FText::FromString(Text));
+	FString Name = TEXT("Tech Store");
+	if (const UTSSBusinessSubsystem* Biz = GetWorld() ? GetWorld()->GetSubsystem<UTSSBusinessSubsystem>() : nullptr) Name = Biz->GetStoreName();
+	if (UTSSReceiptWidget* W = Cast<UTSSReceiptWidget>(Paper->GetUserWidgetObject())) W->SetReceipt(Name, Sale, Lines);
 	bPrinting = true;
 	PrintAlpha = 0.f;
+	Paper->SetRelativeLocation(PrinterPos + FVector(0.f, 0.f, 12.f - PaperLength * 0.5f));
 	Paper->SetVisibility(true);
-	PaperText->SetVisibility(true);
 }
 
 void ATSSReceiptPrinter::Tear()
@@ -441,7 +458,6 @@ void ATSSReceiptPrinter::Tear()
 	bPrinting = false;
 	PrintAlpha = 0.f;
 	Paper->SetVisibility(false);
-	PaperText->SetVisibility(false);
 }
 
 void ATSSReceiptPrinter::Tick(float Dt)
@@ -449,11 +465,9 @@ void ATSSReceiptPrinter::Tick(float Dt)
 	Super::Tick(Dt);
 	if (!bPrinting || PrintAlpha >= 1.f) return;
 	PrintAlpha = FMath::Min(1.f, PrintAlpha + Dt / 1.6f);
-	// The paper grows upward out of the slot.
-	const float L = FMath::Max(0.1f, PaperLength * PrintAlpha);
-Paper->SetRelativeScale3D(FVector(0.003f, PaperWidth / 100.f, L / 100.f));
-	Paper->SetRelativeLocation(PrinterPos + FVector(0.f, 0.f, 12.f + L * 0.5f));
-	PaperText->SetRelativeLocation(PrinterPos + FVector(0.5f, 0.f, 12.f + L * 0.5f));
+	// The sheet rises out of the slot (smoothly slowing as it finishes).
+	const float Rise = FMath::InterpEaseOut(0.f, 1.f, PrintAlpha, 2.f);
+	Paper->SetRelativeLocation(PrinterPos + FVector(0.f, 0.f, 12.f + PaperLength * (Rise - 0.5f)));
 }
 
 FString ATSSReceiptPrinter::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const

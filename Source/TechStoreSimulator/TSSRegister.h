@@ -111,7 +111,9 @@ public:
 	bool WasCardApproved() const { return bCardApproved; }
 	bool HasCard() const { return CurrentCard.IsValid(); }
 	const FTSSBankCard& GetCard() const { return CurrentCard; }
-	bool IsContactlessSale() const { return Total <= ContactlessLimit; }
+	bool IsContactlessSale() const { return !bForceChip && Total <= ContactlessLimit; }
+	/** Test hook: every card sale uses chip and PIN. */
+	bool bForceChip = false;
 	int32 GetPinTyped() const { return PinTyped; }
 	bool IsPinWrong() const { return bPinWrong; }
 	const FString& GetDeclineReason() const { return DeclineReason; }
@@ -130,6 +132,10 @@ public:
 	FVector BaggingPoint(int32 Index) const { return BaggingSlot(Index); }
 	FVector CashPoint() const;
 	FVector TerminalTapPoint() const;
+	/** World position of a key (0-9) on the customer's PIN pad. */
+	FVector TerminalKeyPoint(int32 Digit) const;
+	/** 0..1 through the wait for the customer's next PIN digit (the digit registers at 1). */
+	float GetPinCycle() const { return Phase == ETSSCheckoutPhase::CardPin && !bPinWrong ? FMath::Clamp(1.f - PhaseTimer / 0.75f, 0.f, 1.f) : 0.f; }
 	/** The customer puts item `Index` of their basket down on the counter (they are made hidden at the start). */
 	void RevealItem(int32 Index);
 	bool AllItemsPlaced() const { return ItemsPlaced >= Items.Num() && Items.Num() > 0; }

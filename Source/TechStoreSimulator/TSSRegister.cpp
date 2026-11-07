@@ -207,6 +207,12 @@ FVector ATSSRegister::CashPoint() const
 	return CashPile->GetComponentLocation();
 }
 
+FVector ATSSRegister::TerminalKeyPoint(int32 Digit) const
+{
+	const ATSSCardTerminal* T = GetTerminal();
+	return T ? T->GetKeyPoint(Digit) : GetActorLocation() + FVector(0.f, 0.f, TopZ + 8.f);
+}
+
 FVector ATSSRegister::TerminalTapPoint() const
 {
 	const ATSSCardTerminal* T = GetTerminal();

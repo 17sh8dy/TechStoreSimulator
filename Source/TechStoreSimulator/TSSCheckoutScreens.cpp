@@ -2,6 +2,7 @@
 #include "TSSRegister.h"
 #include "TSSProducts.h"
 #include "TSSBankCard.h"
+#include "TSSBusinessSubsystem.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -121,7 +122,12 @@ TSharedRef<SWidget> UTSSMonitorWidget::RebuildWidget()
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().FillWidth(1.f)
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("TECH STORE  POS"))).Font(ScrFont(TEXT("Bold"), 24))
+						SNew(STextBlock).Text_Lambda([this]()
+						{
+							const UWorld* W = Reg.IsValid() ? Reg->GetWorld() : nullptr;
+							const UTSSBusinessSubsystem* B = W ? W->GetSubsystem<UTSSBusinessSubsystem>() : nullptr;
+							return FText::FromString((B ? B->GetStoreName() : FString(TEXT("Tech Store"))).ToUpper() + TEXT("  POS"));
+						}).Font(ScrFont(TEXT("Bold"), 24))
 					]
 					+ SHorizontalBox::Slot().AutoWidth()
 					[
@@ -216,4 +222,112 @@ TSharedRef<SWidget> UTSSTerminalWidget::RebuildWidget()
 				]
 			]
 		];
+}
+
+// ---- receipt ----------------------------------------------------------------------------------------
+
+namespace
+{
+	const FLinearColor PaperCol(0.97f, 0.96f, 0.91f, 1.f);
+	const FLinearColor InkCol(0.09f, 0.09f, 0.11f, 1.f);
+	const FLinearColor InkSoft(0.38f, 0.38f, 0.42f, 1.f);
+
+	TSharedRef<SWidget> RcText(const FString& S, int32 Size, bool bBold, ETextJustify::Type J = ETextJustify::Left, FLinearColor Col = InkCol)
+	{
+		return SNew(STextBlock).Text(FText::FromString(S)).Font(FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", Size)).ColorAndOpacity(Col).Justification(J);
+	}
+
+	TSharedRef<SWidget> RcRow(const FString& Left, const FString& Right, int32 Size, bool bBold)
+	{
+		return SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f)[ RcText(Left, Size, bBold) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(8.f, 0.f, 0.f, 0.f)[ RcText(Right, Size, bBold) ];
+	}
+
+	TSharedRef<SWidget> RcRule(bool bBold = false)
+	{
+		return SNew(SBox).Padding(FMargin(0.f, 5.f))
+			[
+				RcText(bBold ? TEXT("==========================") : TEXT("- - - - - - - - - - - - - - - - - -"), 12, false, ETextJustify::Center, InkSoft)
+			];
+	}
+
+	TSharedRef<SWidget> RcBarcode(int32 Seed)
+	{
+		TSharedRef<SHorizontalBox> Bars = SNew(SHorizontalBox);
+		FRandomStream R(Seed * 7919 + 13);
+		for (int32 i = 0; i < 46; ++i)
+		{
+			const float W = 1.f + R.RandRange(0, 3);
+			const bool bBar = (i % 2) == 0;
+			Bars->AddSlot().AutoWidth()
+			[
+				SNew(SBox).WidthOverride(W).HeightOverride(46.f)
+				[
+					SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox")).BorderBackgroundColor(bBar ? InkCol : PaperCol)
+				]
+			];
+		}
+		return Bars;
+	}
+}
+
+TSharedRef<SWidget> UTSSReceiptWidget::RebuildWidget()
+{
+	Host = SNew(SBox);
+	SetReceipt(TEXT("Tech Store"), FTSSTransaction(), {});
+	return Host.ToSharedRef();
+}
+
+void UTSSReceiptWidget::ReleaseSlateResources(bool bReleaseChildren)
+{
+	Super::ReleaseSlateResources(bReleaseChildren);
+	Host.Reset();
+}
+
+void UTSSReceiptWidget::SetReceipt(const FString& StoreName, const FTSSTransaction& Sale, const TArray<FTSSSaleLine>& Lines)
+{
+	if (!Host.IsValid()) return;
+	TSharedRef<SVerticalBox> Body = SNew(SVerticalBox);
+	auto Add = [&Body](TSharedRef<SWidget> W, float PadTop = 0.f) { Body->AddSlot().AutoHeight().Padding(0.f, PadTop, 0.f, 0.f)[ W ]; };
+
+	Add(RcText(StoreName.ToUpper(), StoreName.Len() > 14 ? 24 : 32, true, ETextJustify::Center));
+	Add(RcText(TEXT("100 Commerce Way, Harbor City"), 13, false, ETextJustify::Center, InkSoft), 2.f);
+	Add(RcText(TEXT("Open every day  -  Thank you for shopping"), 11, false, ETextJustify::Center, InkSoft));
+	Add(RcRule());
+	Add(RcRow(UTSSBusinessSubsystem::FormatDate(Sale.Day), UTSSBusinessSubsystem::FormatClock(Sale.TimeMinutes / 60.f), 14, false));
+	Add(RcRow(FString::Printf(TEXT("Receipt #%05d"), Sale.Id), Sale.Method == ETSSPayMethod::Card ? TEXT("CARD") : TEXT("CASH"), 14, false));
+	Add(RcRule());
+	for (const FTSSSaleLine& L : Lines)
+	{
+		Add(RcRow(FString::Printf(TEXT("%s"), TSSProductDef(L.Product).Name), TSSMoney::Format(L.Total() * 100), 16, true), 2.f);
+		Add(RcText(FString::Printf(TEXT("    %d x %s"), L.Qty, *TSSMoney::Format(L.UnitPrice * 100)), 12, false, ETextJustify::Left, InkSoft));
+	}
+	Add(RcRule());
+	Add(RcRow(TEXT("Subtotal"), TSSMoney::Format(Sale.Subtotal), 15, false));
+	Add(RcRow(FString::Printf(TEXT("Sales tax (%.2f%%)"), TSSMoney::TaxRate * 100.f), TSSMoney::Format(Sale.Tax), 15, false), 2.f);
+	Add(RcRule(true));
+	Add(RcRow(TEXT("TOTAL"), TSSMoney::Format(Sale.Total), 24, true));
+	Add(RcRule(true));
+	if (Sale.Method == ETSSPayMethod::Cash)
+	{
+		Add(RcRow(TEXT("Cash tendered"), TSSMoney::Format(Sale.CashReceived), 15, false));
+		Add(RcRow(TEXT("Change due"), TSSMoney::Format(Sale.Change), 15, true), 2.f);
+	}
+	else if (Sale.Method == ETSSPayMethod::Card)
+	{
+		Add(RcRow(FString::Printf(TEXT("%s DEBIT"), *Sale.CardNetwork), FString::Printf(TEXT("**** %s"), *Sale.CardLast4), 15, false));
+		Add(RcRow(TEXT("Authorisation"), Sale.AuthCode, 15, false), 2.f);
+		Add(RcText(TEXT("APPROVED"), 20, true, ETextJustify::Center), 6.f);
+	}
+	Add(RcRule());
+	Add(RcText(TEXT("THANK YOU!"), 26, true, ETextJustify::Center), 4.f);
+	Add(RcText(TEXT("Keep this receipt for returns"), 12, false, ETextJustify::Center, InkSoft), 2.f);
+	Add(RcText(TEXT("within 14 days"), 12, false, ETextJustify::Center, InkSoft));
+	Body->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 12.f, 0.f, 0.f)[ RcBarcode(Sale.Id) ];
+	Add(RcText(FString::Printf(TEXT("%05d  %06d"), Sale.Id, Sale.AuthCode.IsEmpty() ? Sale.Total : FCString::Atoi(*Sale.AuthCode)), 11, false, ETextJustify::Center, InkSoft), 3.f);
+
+	Host->SetContent(
+		SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("GenericWhiteBox")).BorderBackgroundColor(PaperCol).Padding(FMargin(18.f, 16.f))
+		[ Body ]);
 }

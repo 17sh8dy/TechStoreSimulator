@@ -146,6 +146,10 @@ public:
 	void SetCardPresent(bool bPresent) { bCardWanted = bPresent; }
 	/** World position the customer taps their card on. */
 	FVector GetTapPoint() const;
+	/** Where the card goes into the PIN pad's chip slot, and the card's tilt (it lies along the pad). */
+	FVector GetSlotPoint() const { return GetTapPoint(); }
+	/** World position of a key on the customer's PIN pad (digit 0-9). */
+	FVector GetKeyPoint(int32 Digit) const;
 
 private:
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Card;
@@ -171,8 +175,8 @@ public:
 	bool HasReceipt() const { return bPrinting || PrintAlpha > 0.f; }
 
 private:
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> Paper;
-	UPROPERTY() TObjectPtr<UTextRenderComponent> PaperText;
+	virtual void BeginPlay() override;
+	UPROPERTY(Transient) TObjectPtr<UWidgetComponent> Paper;   // the printed receipt (a widget on a sheet of paper)
 	bool bPrinting = false;
 	float PrintAlpha = 0.f;
 };

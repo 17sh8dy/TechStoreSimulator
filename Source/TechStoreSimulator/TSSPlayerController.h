@@ -52,6 +52,8 @@ public:
 	/** Debug: looks at demo car N from a good angle. Which: 0 front 3/4, 1 side, 2 rear 3/4, 3 street view down the road, 4 high. */
 	UFUNCTION(Exec) void TSSTownCam(int32 Car, int32 Which);
 	/** Debug: leave the menu and play. */
+	/** Debug: one customer pays by chip and PIN while the camera photographs the typing, then the receipt. */
+	UFUNCTION(Exec) void TSSPayDemo();
 	UFUNCTION(Exec) void TSSStart();
 
 protected:

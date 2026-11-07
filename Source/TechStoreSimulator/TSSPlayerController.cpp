@@ -70,6 +70,12 @@ void ATSSPlayerController::BeginPlay()
 			}, 1.5f, false);
 		}
 
+		// `-TSSPayShots`: one customer pays by chip and PIN; photographs the typing and the receipt, then quits.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSPayShots")))
+		{
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, [this]() { ConsoleCommand(TEXT("TSSPayDemo")); }, 1.0f, false);
+		}
 		// `-TSSDoorShots`: photographs the shop door from outside and inside, then quits.
 		if (FParse::Param(FCommandLine::Get(), TEXT("TSSDoorShots")))
 		{
@@ -274,6 +280,77 @@ void ATSSPlayerController::PlayerTick(float DeltaTime)
 			if (Menu->GetPage() == ETSSMenuPage::Pause) ResumeGame();
 		}
 	}
+}
+
+void ATSSPlayerController::TSSPayDemo()
+{
+	UTSSCustomerSubsystem* CS = GetWorld()->GetSubsystem<UTSSCustomerSubsystem>();
+	ATSSRegister* Reg = nullptr;
+	for (TActorIterator<ATSSRegister> It(GetWorld()); It; ++It) { Reg = *It; break; }
+	ATSSCharacter* Me = Cast<ATSSCharacter>(GetPawn());
+	if (!CS || !Reg || !Me) return;
+	TSSStart();
+	CS->bAutoSpawn = false;
+	for (TActorIterator<ATSSCustomer> It(GetWorld()); It; ++It) It->Destroy();
+	Reg->ReleaseSale();
+	Reg->bForceChip = true; Reg->ExpiredCardChance = 0.f; Reg->CardDeclineChance = 0.f; Reg->WrongPinChance = 0.f;
+	ATSSCustomer* C = CS->SpawnCustomer(8.f);
+	if (!C) return;
+	C->Patience = 300.f; C->ForceMethod = ETSSPayMethod::Card;
+	struct FS { int32 Step = 0; float T = 0.f; int32 Shots = 0; float Next = 0.f; };
+	TSharedRef<FS> St = MakeShared<FS>();
+	auto Cam = [this, Reg](FVector P, FVector T)
+	{
+		const FVector Wp = Reg->GetActorTransform().TransformPosition(P);
+		const FVector Wt = Reg->GetActorTransform().TransformPosition(T);
+		const FRotator R = (Wt - (Wp + FVector(0.f, 0.f, 154.f))).Rotation();
+		ConsoleCommand(FString::Printf(TEXT("TSSLook %f %f 90 %f %f"), Wp.X, Wp.Y, R.Yaw, R.Pitch));
+	};
+	FTimerHandle* H = new FTimerHandle();
+	GetWorldTimerManager().SetTimer(*H, [this, St, Reg, Me, Cam, H]()
+	{
+		St->T += 0.1f;
+		switch (St->Step)
+		{
+		case 0:
+			if (Reg->GetPhase() == ETSSCheckoutPhase::Scanning && Reg->AllItemsPlaced())
+			{
+				for (ATSSProductItem* I : Reg->GetItems()) { I->Interact(Me, FHitResult()); Reg->TryScanHeld(Me); }
+				Reg->GetKeyboard()->Interact(Me, FHitResult());
+				St->Step = 1; St->T = 0.f;
+			}
+			break;
+		case 1: // the customer is at the pad: photograph the card going in and the typing from the customer's side
+			if (Reg->GetPhase() == ETSSCheckoutPhase::CardTap || Reg->GetPhase() == ETSSCheckoutPhase::CardPin)
+			{
+				if (St->T >= St->Next && St->Shots < 8)
+				{
+					Cam(FVector(-135.f, -25.f, 0.f), FVector(-40.f, 40.f, 100.f));
+					FTimerHandle T2; GetWorldTimerManager().SetTimer(T2, [this]() { ConsoleCommand(TEXT("Shot ShowUI")); }, 0.12f, false);
+					++St->Shots; St->Next = St->T + 0.55f;
+				}
+			}
+			else if (Reg->GetPhase() == ETSSCheckoutPhase::CardReady)
+			{
+				Reg->GetTerminal()->Interact(Me, FHitResult());
+				St->Step = 2; St->T = 0.f;
+			}
+			if (St->T > 60.f) ConsoleCommand(TEXT("QUIT_EDITOR"));
+			break;
+		case 2: // receipt
+			if (Reg->GetPhase() == ETSSCheckoutPhase::Receipt && St->T > 2.2f)
+			{
+				Cam(FVector(70.f, -105.f, 0.f), FVector(28.f, -122.f, 30.f));
+				FTimerHandle T2; GetWorldTimerManager().SetTimer(T2, [this]() { ConsoleCommand(TEXT("Shot ShowUI")); }, 0.5f, false);
+				St->Step = 3; St->T = 0.f;
+			}
+			if (St->T > 30.f) ConsoleCommand(TEXT("QUIT_EDITOR"));
+			break;
+		case 3:
+			if (St->T > 1.5f) ConsoleCommand(TEXT("QUIT_EDITOR"));
+			break;
+		}
+	}, 0.1f, true);
 }
 
 void ATSSPlayerController::TSSStart()

@@ -2,7 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "TSSCheckoutTypes.h"
 #include "TSSCheckoutScreens.generated.h"
+
+class SBox;
 
 class ATSSRegister;
 
@@ -49,4 +52,22 @@ private:
 	FSlateColor StatusColor() const;
 
 	TWeakObjectPtr<ATSSRegister> Reg;
+};
+
+/** A printed till receipt: store name and address, date and time, itemised lines, tax and total, how it was paid, a barcode and a thank-you. */
+UCLASS()
+class UTSSReceiptWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	/** Fills the paper in. Safe to call again for the next sale. */
+	void SetReceipt(const FString& StoreName, const FTSSTransaction& Sale, const TArray<FTSSSaleLine>& Lines);
+
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void ReleaseSlateResources(bool bReleaseChildren) override;
+
+private:
+	TSharedPtr<SBox> Host;
 };
