@@ -22,6 +22,19 @@ ATSSRoad* ATSSRoad::Find(UWorld* World)
 
 float ATSSRoad::GetLength() const { return Spline->GetSplineLength(); }
 
+FVector ATSSRoad::PointAt(float Distance, float Offset) const
+{
+	const FVector P = Spline->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
+	const FVector T = Spline->GetDirectionAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World).GetSafeNormal2D();
+	return P + FVector::CrossProduct(FVector::UpVector, T) * Offset;
+}
+
+float ATSSRoad::GetCrosswalkDistance() const
+{
+	const float Len = Spline->GetSplineLength();
+	return FMath::Clamp(Len * 0.5f - 500.f, 300.f, Len - 300.f);   // the same spot Rebuild() paints the zebra stripes
+}
+
 FRotator ATSSRoad::LaneRotation(float Distance) const
 {
 	const FVector T = Spline->GetDirectionAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
@@ -146,7 +159,7 @@ void ATSSRoad::Rebuild()
 	static UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 
 	// The crosswalk sits a little before the shop so the parked truck never covers it.
-	const float CrossAt = FMath::Clamp(Len * 0.5f - 500.f, 300.f, Len - 300.f);
+const float CrossAt = GetCrosswalkDistance();
 	{
 		const FVector Mid = Spline->GetLocationAtDistanceAlongSpline(CrossAt, ESplineCoordinateSpace::World);
 		const FVector Fwd = Spline->GetDirectionAtDistanceAlongSpline(CrossAt, ESplineCoordinateSpace::World).GetSafeNormal2D();

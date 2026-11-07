@@ -29,6 +29,13 @@ public:
 	static ATSSRoad* Find(UWorld* World);
 
 	float GetLength() const;
+	/** A point `Offset` cm to the right of the road centre at this distance (right is the shop side). */
+	FVector PointAt(float Distance, float Offset) const;
+	/** Facing (yaw only) of the road at this distance, in the direction of the spline. */
+	FRotator YawAt(float Distance) const { return LaneRotation(Distance); }
+	float GetLaneOffset() const { return LaneOffset; }
+	/** Distance along the road of the crosswalk. */
+	float GetCrosswalkDistance() const;
 	/** The truck's lane centre at this distance along the road. */
 	FVector LaneLocation(float Distance) const;
 	/** Facing (yaw only) of travel at this distance. */

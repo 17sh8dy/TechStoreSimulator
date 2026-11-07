@@ -47,6 +47,10 @@ public:
 	UFUNCTION(Exec) void TSSCustomerTest();
 	/** Debug: put the player at X Y Z facing Yaw/Pitch (for screenshots). */
 	UFUNCTION(Exec) void TSSLook(float X, float Y, float Z, float Yaw, float Pitch);
+	/** Debug: parks one of each kind of car on the road (traffic off) so they can be photographed. */
+	UFUNCTION(Exec) void TSSTownDemo();
+	/** Debug: looks at demo car N from a good angle. Which: 0 front 3/4, 1 side, 2 rear 3/4, 3 street view down the road, 4 high. */
+	UFUNCTION(Exec) void TSSTownCam(int32 Car, int32 Which);
 	/** Debug: leave the menu and play. */
 	UFUNCTION(Exec) void TSSStart();
 

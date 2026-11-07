@@ -21,6 +21,7 @@
 #include "TSSBusinessSave.h"
 #include "TSSDeliveryActors.h"
 #include "TSSBusinessSubsystem.h"
+#include "TSSTown.h"
 #include "TSSEmployee.h"
 #include "TSSStoreDeskComputer.h"
 #include "TSSStoreDeskWidget.h"
@@ -39,7 +40,37 @@ void ATSSPlayerController::BeginPlay()
 	Menu->AddToViewport(10);
 	ShowMenu(true);
 
-	// `-TSSStreetShots`: sends a truck down the road and photographs it, then quits (for looking at the street).
+		// `-TSSTownShots`: parks one of each car on the road and photographs them, then quits (for looking at the cars).
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSTownShots")))
+		{
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, [this]()
+			{
+				TSSStart();
+				auto At = [this](float Delay, FString Cmd)
+				{
+					FTimerHandle T;
+					GetWorldTimerManager().SetTimer(T, [this, Cmd]() { ConsoleCommand(Cmd); }, Delay, false);
+				};
+				float T = 0.3f;
+				At(T, TEXT("TSSTownDemo")); T += 0.8f;
+				const int32 Shots[][2] = { { 0, 0 }, { 0, 1 }, { 0, 2 }, { 1, 0 }, { 2, 0 }, { 2, 1 }, { 3, 0 }, { 1, 3 }, { 2, 4 } };
+				for (const int32* S : Shots)
+				{
+					At(T, FString::Printf(TEXT("TSSTownCam %d %d"), S[0], S[1])); T += 0.7f;
+					At(T, TEXT("Shot ShowUI")); T += 1.1f;
+				}
+				At(T, TEXT("TSSTime 21.5")); T += 0.6f;
+				for (const int32* S : { Shots[0], Shots[3], Shots[6] })
+				{
+					At(T, FString::Printf(TEXT("TSSTownCam %d %d"), S[0], S[1])); T += 0.7f;
+					At(T, TEXT("Shot ShowUI")); T += 1.1f;
+				}
+				At(T + 0.5f, TEXT("quit"));
+			}, 1.5f, false);
+		}
+
+		// `-TSSStreetShots`: sends a truck down the road and photographs it, then quits (for looking at the street).
 	if (FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")))
 	{
 		FTimerHandle H;
@@ -236,6 +267,50 @@ void ATSSPlayerController::TSSLook(float X, float Y, float Z, float Yaw, float P
 {
 	if (APawn* P = GetPawn()) P->SetActorLocation(FVector(X, Y, Z));
 	SetControlRotation(FRotator(Pitch, Yaw, 0.f));
+}
+
+void ATSSPlayerController::TSSTownDemo()
+{
+	UTSSTownSubsystem* Town = GetWorld()->GetSubsystem<UTSSTownSubsystem>();
+	ATSSRoad* Road = ATSSRoad::Find(GetWorld());
+	if (!Town || !Road) { UE_LOG(LogTemp, Display, TEXT("TSS town demo: no town or road")); return; }
+	Town->SetTrafficEnabled(false);
+	Town->ClearTraffic();
+	const float D0 = Road->GetCrosswalkDistance() + 800.f;
+	const ETSSCarType Types[] = { ETSSCarType::Sedan, ETSSCarType::Hatchback, ETSSCarType::Suv, ETSSCarType::Van };
+	const FLinearColor Paints[] = { FLinearColor(0.55f, 0.03f, 0.03f), FLinearColor(0.03f, 0.1f, 0.35f), FLinearColor(0.8f, 0.8f, 0.78f), FLinearColor(0.02f, 0.18f, 0.1f) };
+	for (int32 i = 0; i < 4; ++i)
+	{
+		ATSSTrafficCar* Car = Town->SpawnCar(Types[i], true, D0 + 900.f * i, 0.f, Paints[i]);
+		if (Car) UE_LOG(LogTemp, Display, TEXT("TSS town demo car %d at %s, %d triangles"), i, *Car->GetActorLocation().ToString(), Car->NumTriangles());
+	}
+	if (ATSSTrafficCar* Oncoming = Town->SpawnCar(ETSSCarType::Sedan, false, D0 + 400.f, 0.f, FLinearColor(0.12f, 0.2f, 0.4f))) { (void)Oncoming; }
+}
+
+void ATSSPlayerController::TSSTownCam(int32 CarIndex, int32 Which)
+{
+	UTSSTownSubsystem* Town = GetWorld()->GetSubsystem<UTSSTownSubsystem>();
+	if (!Town) return;
+	TArray<ATSSTrafficCar*> Forward;
+	for (const TWeakObjectPtr<ATSSTrafficCar>& C : Town->GetCars()) if (C.IsValid() && C->GoesAlongRoad()) Forward.Add(C.Get());
+	Forward.Sort([](const ATSSTrafficCar& A, const ATSSTrafficCar& B) { return A.GetDistance() < B.GetDistance(); });
+	if (!Forward.IsValidIndex(CarIndex)) return;
+	const ATSSTrafficCar* Car = Forward[CarIndex];
+	const FVector At = Car->GetActorLocation() + FVector(0.f, 0.f, 70.f);
+	const FVector Fwd = Car->GetActorForwardVector(), Rgt = Car->GetActorRightVector();
+	FVector From;
+	switch (Which)
+	{
+	case 0: From = At + Fwd * 520.f - Rgt * 360.f; break;          // front three-quarter, from the shop side
+	case 1: From = At - Rgt * 620.f; break;                         // side, from the shop side
+	case 2: From = At - Fwd * 520.f - Rgt * 360.f; break;          // rear three-quarter
+	case 3: From = At - Fwd * 1500.f - Rgt * 700.f; break;         // down the street
+	default: From = At + FVector(0.f, 0.f, 700.f) - Fwd * 500.f - Rgt * 700.f; break;
+	}
+	const FVector Eye = FVector(From.X, From.Y, FMath::Max(From.Z, 90.f));
+	const FRotator Face = (At - (Eye + FVector(0.f, 0.f, 0.f))).Rotation();
+	if (APawn* P = GetPawn()) P->SetActorLocation(FVector(Eye.X, Eye.Y, Eye.Z - 64.f));
+	SetControlRotation(Face);
 }
 
 void ATSSPlayerController::TSSSelfTest()
