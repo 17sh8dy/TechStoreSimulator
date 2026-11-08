@@ -5,6 +5,8 @@ Startup map: `/Game/Maps/Store_Main` (floor, sun, sky, PlayerStart). `Scripts/cr
 
 ## Gameplay slice (2026-10-26)
 Walk the store, order stock on the StoreDesk PC, unpack the delivery (E), stock it on shelves (E), take them back (E), change a product's shelf price (mouse wheel or [ ]).
+- Town plan (City Sample dropped for release 1): `docs/PLAN-TOWN.md`.
+- Town plan (City Sample dropped for release 1): `docs/PLAN-TOWN.md`.
 - C++ in `Source/TechStoreSimulator/`: `TSSProducts` (catalogue), `TSSStoreSubsystem` (cash, prices), `TSSShelf`, `TSSShopDoor` (door + Open/Closed sign), `TSSRoad` (delivery truck road), `TSSBlock`, `TSSHudWidget`, interaction trace in `TSSCharacter`.
 - `Scripts/build_store_map.py` rebuilds the store in `Store_Main` (idempotent). Headless: `UnrealEditor-Cmd.exe TechStoreSimulator.uproject /Game/Maps/Store_Main -ExecutePythonScript="Scripts/build_store_map.py" -unattended -nosplash`
 - Self-test + screenshots: launch the game with `-TSSAutoTest` (logs `TSSTEST PASS/FAIL`, shots in `Saved/Screenshots`). Console: `TSSSelfTest`, `TSSLook X Y Z Yaw Pitch`, `TSSStart`.

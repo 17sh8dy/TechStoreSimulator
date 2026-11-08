@@ -35,6 +35,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "DayNight") float NoonLux = 10.f;
 	UPROPERTY(EditAnywhere, Category = "DayNight") float MoonLux = 0.35f;
+	/** Sky-light fill outdoors: the shadow side of the street is lit by this in daytime, and it falls back to the night value after dark. The shop interior is lit by its own lamps, so this is kept moderate. */
+	UPROPERTY(EditAnywhere, Category = "DayNight") float SkyDayIntensity = 1.3f;
+	UPROPERTY(EditAnywhere, Category = "DayNight") float SkyNightIntensity = 0.15f;
 
 private:
 	void Apply(float Hour);

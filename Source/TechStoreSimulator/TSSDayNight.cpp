@@ -91,6 +91,9 @@ void ATSSDayNight::Apply(float Hour)
 		L->SetLightColor(Color);
 	}
 
+	if (Sky.IsValid())
+		Sky->GetLightComponent()->SetIntensity(FMath::Lerp(SkyNightIntensity, SkyDayIntensity, SunLux(E)));
+
 	if (LampState != (bNight ? 1 : 0))
 	{
 		LampState = bNight ? 1 : 0;

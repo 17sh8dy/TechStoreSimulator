@@ -3,6 +3,7 @@
 #include "TSSDayNight.h"
 #include "TSSDeliveryActors.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSTownBackdrop.h"
 #include "EngineUtils.h"
 
 namespace
@@ -25,6 +26,11 @@ void UTSSTownSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	Super::OnWorldBeginPlay(InWorld);
 	Road = ATSSRoad::Find(&InWorld);
 	if (FParse::Param(FCommandLine::Get(), TEXT("TSSNoTraffic"))) bTraffic = false;
+	if (Road.IsValid() && !FParse::Param(FCommandLine::Get(), TEXT("TSSNoBackdrop")))
+	{
+		if (ATSSTownBackdrop* Back = InWorld.SpawnActor<ATSSTownBackdrop>(ATSSTownBackdrop::StaticClass(), FTransform::Identity))
+			Back->Build(Road.Get());
+	}
 	RefreshNight();
 }
 
