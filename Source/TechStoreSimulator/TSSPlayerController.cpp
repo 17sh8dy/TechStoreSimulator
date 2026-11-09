@@ -12,6 +12,10 @@
 #include "TSSMover.h"
 #include "TSSShelf.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSBin.h"
+#include "TSSPasserby.h"
+#include "TSSTown.h"
+#include "TSSCustomerSpawner.h"
 #include "TSSCustomer.h"
 #include "TSSSettings.h"
 #include "TSSCustomerSubsystem.h"
@@ -114,6 +118,32 @@ void ATSSPlayerController::BeginPlay()
 					At(T, TEXT("TSSLook 380 0 150 0 -8")); T += 1.3f;   At(T, TEXT("Shot ShowUI")); T += 1.0f;
 				}
 				At(T + 0.5f, TEXT("QUIT_EDITOR"));
+			}, 1.0f, false);
+		}
+		// `-TSSLifeShots`: trees, a bin, people on the pavement and the empty box in hand, then quits.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSLifeShots")))
+		{
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, [this]()
+			{
+				TSSStart();
+				auto At = [this](float Delay, FString Cmd)
+				{
+					FTimerHandle T;
+					GetWorldTimerManager().SetTimer(T, [this, Cmd]() { ConsoleCommand(Cmd); }, Delay, false);
+				};
+				At(0.2f, TEXT("TSSTime 12.4"));
+				At(0.3f, TEXT("TSSCrowd 6"));
+				At(1.0f, TEXT("TSSLook 840 -1000 165 90 -3"));   At(3.0f, TEXT("Shot ShowUI"));
+				At(3.6f, TEXT("TSSLook 900 -1560 170 -35 -2"));  At(5.2f, TEXT("Shot ShowUI"));
+				At(5.8f, TEXT("TSSLook 1000 215 190 8 -32"));    At(7.2f, TEXT("Shot ShowUI"));
+				At(7.25f, TEXT("TSSLook 1790 140 175 40 -14"));  At(8.1f, TEXT("Shot ShowUI"));
+				At(8.3f, TEXT("TSSBox 1"));
+				At(8.4f, TEXT("TSSLook 900 -80 165 0 -12"));     At(9.7f, TEXT("Shot ShowUI"));
+				At(10.1f, TEXT("TSSTime 21.5"));
+				At(10.7f, TEXT("TSSBox 0"));
+				At(10.9f, TEXT("TSSLook 840 -1000 165 90 -3"));  At(12.3f, TEXT("Shot ShowUI"));
+				At(13.1f, TEXT("QUIT_EDITOR"));
 			}, 1.0f, false);
 		}
 		// `-TSSStreetShots`: sends a truck down the road and photographs it, then quits (for looking at the street).
@@ -378,6 +408,18 @@ void ATSSPlayerController::TSSPayDemo()
 void ATSSPlayerController::TSSStart()
 {
 	if (Menu) EnterGameInput();
+}
+
+void ATSSPlayerController::TSSBox(int32 On)
+{
+	if (ATSSCharacter* Me = Cast<ATSSCharacter>(GetPawn())) Me->SetCarryingEmptyBox(On != 0);
+}
+
+void ATSSPlayerController::TSSCrowd(int32 Count)
+{
+	UTSSTownSubsystem* Town = GetWorld()->GetSubsystem<UTSSTownSubsystem>();
+	if (!Town) return;
+	for (int32 i = 0; i < Count; ++i) Town->SpawnPasserby(i % 3 != 2, i % 2 == 0, false);
 }
 
 void ATSSPlayerController::TSSLook(float X, float Y, float Z, float Yaw, float Pitch)
@@ -1334,6 +1376,42 @@ void ATSSPlayerController::TSSDeskTest()
 			Check(TEXT("the order is received once everything is unpacked"), Ord && Ord->Status == ETSSOrderStatus::Received && Ord->UnitsLeft == 0);
 			Check(TEXT("receiving a delivery earned experience"), Biz->GetXP() > St->XP0);
 			Check(TEXT("the delivery achievement unlocked"), Biz->HasAchievement(TEXT("first_delivery")));
+
+			// Emptied boxes do not vanish: they stay until the owner carries them to a bin.
+			int32 Empties = 0;
+			for (ATSSParcel* P : Parcels) if (IsValid(P) && P->IsEmpty()) ++Empties;
+			Check(TEXT("emptied boxes stay in the shop until they are binned"), Empties == Parcels.Num() && Parcels.Num() == 2);
+			ATSSBin* Bin = nullptr;
+			for (TActorIterator<ATSSBin> It(GetWorld()); It; ++It) { Bin = *It; break; }
+			Check(TEXT("the street has litter bins"), Bin != nullptr);
+			if (Bin && Parcels.Num() == 2 && IsValid(Parcels[0]) && IsValid(Parcels[1]))
+			{
+				Parcels[0]->Interact(Me, FHitResult());
+				Check(TEXT("picking up an empty box puts it in the player's hands"), Me->IsCarryingEmptyBox() && !IsValid(Parcels[0]));
+				Check(TEXT("with the empty box in hand, another box says the hands are full"), Parcels[1]->GetPrompt(Me, FHitResult()).Contains(TEXT("hands are full")));
+				Check(TEXT("the bin offers to take the box"), Bin->GetPrompt(Me, FHitResult()).Contains(TEXT("Put the empty box")));
+				const int32 Before = Bin->GetBoxCount();
+				Bin->Interact(Me, FHitResult());
+				Check(TEXT("putting the box in the bin frees the hands and the bin counts it (it never fills)"), !Me->IsCarryingEmptyBox() && Bin->GetBoxCount() == Before + 1);
+				Parcels[1]->Interact(Me, FHitResult());
+				Bin->Interact(Me, FHitResult());
+				Check(TEXT("a second box also goes in: no capacity limit yet"), Bin->GetBoxCount() == Before + 2);
+			}
+
+			// People: pavements have walkers, and a shopper arriving from the street starts far from the door.
+			if (UTSSTownSubsystem* Town = GetWorld()->GetSubsystem<UTSSTownSubsystem>())
+			{
+				const int32 N0 = Town->PasserbyCount();
+				ATSSPasserby* Walker = Town->SpawnPasserby(true, true, false);
+				Check(TEXT("a passer-by walks the pavement"), Walker && Town->PasserbyCount() == N0 + 1);
+				if (Walker) Walker->Destroy();
+			}
+			if (UTSSCustomerSubsystem* CS = GetWorld()->GetSubsystem<UTSSCustomerSubsystem>())
+			{
+				ATSSCustomer* Arriving = CS->GetSpawner() ? CS->GetSpawner()->SpawnCustomer(1.f, true) : nullptr;
+				Check(TEXT("a shopper from the street starts far down the pavement, not at the door"), Arriving && FMath::Abs(Arriving->GetActorLocation().Y) > 1500.f);
+				if (Arriving) Arriving->Destroy();
+			}
 			St->Step = 1; St->Elapsed = 0.f;
 			break;
 		}

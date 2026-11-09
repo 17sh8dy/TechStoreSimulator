@@ -1,5 +1,8 @@
 #include "TSSRoad.h"
 #include "TSSProducts.h"
+#include "TSSStreetProps.h"
+#include "ProceduralMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SplineComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SplineMeshComponent.h"
@@ -22,6 +25,22 @@ ATSSRoad* ATSSRoad::Find(UWorld* World)
 }
 
 float ATSSRoad::GetLength() const { return Spline->GetSplineLength(); }
+
+void ATSSRoad::GetBinTransforms(TArray<FTransform>& Out) const
+{
+	const float Len = GetLength();
+	for (float D : { 1650.f, 3300.f, 5000.f })
+	{
+		if (D > Len - 200.f) continue;
+		for (float Side : { 1.f, -1.f })
+		{
+			const float Off = Side * (RoadWidth * 0.5f + 40.f);
+			const FVector At = PointAt(D, Off);
+			const FVector ToRoad = (PointAt(D, 0.f) - At).GetSafeNormal2D();
+			Out.Add(FTransform(FRotator(0.f, ToRoad.Rotation().Yaw, 0.f), At + FVector(0.f, 0.f, 12.f)));
+		}
+	}
+}
 
 FVector ATSSRoad::PointAt(float Distance, float Offset) const
 {
@@ -277,8 +296,7 @@ const float CrossAt = GetCrosswalkDistance();
 				Inst(Cube, Joint, false, P + FVector(0.f, 0.f, 12.3f), Rot, FVector(Len, 2.5f, 0.5f));
 			}
 
-		// Trees: a pit, a trunk and a clump of leaves, on both pavements, clear of the lamps and the crosswalk.
-		static const FLinearColor Leaves[] = { FLinearColor(0.1f, 0.3f, 0.07f), FLinearColor(0.16f, 0.36f, 0.08f), FLinearColor(0.34f, 0.4f, 0.07f), FLinearColor(0.12f, 0.27f, 0.1f) };
+		// Trees: real procedural trees (flared trunk, forked branches, lumpy crown) in iron-grated pits, clear of the lamps and the crosswalk.
 		int32 Idx = 0;
 		for (float D = 1150.f; D < Len - 500.f; D += 1300.f, ++Idx)
 		{
@@ -288,17 +306,31 @@ const float CrossAt = GetCrosswalkDistance();
 				FVector P, R; FRotator Rot;
 				Frame(D + (Side < 0.f ? 260.f : 0.f), Side * (KerbOff + 70.f), P, R, Rot);
 				const FVector Base = P + FVector(0.f, 0.f, 12.f);
-				const float H = 360.f + 60.f * ((Idx + (Side < 0.f ? 1 : 0)) % 3);
-				Inst(Cube, FLinearColor(0.16f, 0.13f, 0.11f), false, Base + FVector(0.f, 0.f, 1.f), Rot, FVector(110.f, 110.f, 3.f));
-				Inst(Cylinder, FLinearColor(0.2f, 0.14f, 0.09f), true, Base + FVector(0.f, 0.f, H * 0.5f), Rot, FVector(22.f, 22.f, H));
-				const FLinearColor Leaf = Leaves[(Idx * 2 + (Side < 0.f ? 1 : 0)) % UE_ARRAY_COUNT(Leaves)];
-				Inst(Ball, Leaf, false, Base + FVector(0.f, 0.f, H + 80.f), Rot, FVector(300.f, 300.f, 260.f));
-				Inst(Ball, Leaf * 0.85f, false, Base + R * 70.f + FVector(0.f, 60.f, H + 20.f), Rot, FVector(210.f, 210.f, 190.f));
-				Inst(Ball, Leaf * 1.1f, false, Base - R * 70.f + FVector(0.f, -60.f, H + 140.f), Rot, FVector(200.f, 200.f, 190.f));
+				const int32 Seed = Idx * 3 + (Side < 0.f ? 1 : 0);
+				const float H = 330.f + 55.f * (Seed % 3);
+				UProceduralMeshComponent* Tree = NewObject<UProceduralMeshComponent>(this);
+				Tree->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+				Tree->SetupAttachment(Spline);
+				Tree->RegisterComponent();
+				Tree->SetWorldLocationAndRotation(Base, FRotator(0.f, Seed * 53.f, 0.f));
+				TSSStreet::BuildTree(Tree, Seed + 11, H);
+				Tree->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Generated.Add(Tree);
+				// An invisible post so the trunk stops you.
+				UCapsuleComponent* Trunk = NewObject<UCapsuleComponent>(this);
+				Trunk->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+				Trunk->SetupAttachment(Spline);
+				Trunk->RegisterComponent();
+				Trunk->InitCapsuleSize(22.f, 130.f);
+				Trunk->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+				Trunk->SetCollisionResponseToAllChannels(ECR_Block);
+				Trunk->SetHiddenInGame(true);
+				Trunk->SetWorldLocation(Base + FVector(0.f, 0.f, 130.f));
+				Generated.Add(Trunk);
 			}
 		}
 
-		// Hydrants (red), litter bins (dark green) and benches on the building side of the far pavement.
+		// Hydrants (red) and benches (the litter bins are interactive actors the town spawns, see GetBinTransforms) on the building side of the far pavement.
 		for (float D : { 900.f, 4100.f })
 		{
 			FVector P, R; FRotator Rot;
@@ -307,16 +339,6 @@ const float CrossAt = GetCrosswalkDistance();
 			Inst(Cylinder, Red, true, P + FVector(0.f, 0.f, 12.f + 32.f), Rot, FVector(24.f, 24.f, 64.f));
 			Inst(Cylinder, Red, false, P + FVector(0.f, 0.f, 12.f + 70.f), Rot, FVector(30.f, 30.f, 8.f));
 			Inst(Cylinder, Red, false, P + FVector(0.f, 0.f, 12.f + 42.f) + R * 0.f, Rot + FRotator(0.f, 0.f, 90.f), FVector(12.f, 12.f, 48.f));
-		}
-		for (float D : { 1650.f, 3300.f, 5000.f })
-		{
-			for (float Side : { 1.f, -1.f })
-			{
-				FVector P, R; FRotator Rot;
-				Frame(D, Side * (KerbOff + 40.f), P, R, Rot);
-				Inst(Cylinder, FLinearColor(0.06f, 0.14f, 0.1f), true, P + FVector(0.f, 0.f, 12.f + 45.f), Rot, FVector(46.f, 46.f, 90.f));
-				Inst(Cylinder, FLinearColor(0.1f, 0.1f, 0.11f), false, P + FVector(0.f, 0.f, 12.f + 92.f), Rot, FVector(50.f, 50.f, 5.f));
-			}
 		}
 		for (float D : { 2150.f, 4600.f })
 		{

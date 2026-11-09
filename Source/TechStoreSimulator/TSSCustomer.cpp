@@ -5,6 +5,7 @@
 #include "TSSHumanComponent.h"
 #include "TSSProductBox.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSStoreLayout.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -15,6 +16,21 @@ namespace
 	constexpr float CapsuleHalf = 90.f;
 	constexpr ETSSHand RHand = ETSSHand::Right;
 	constexpr ETSSHand LHand = ETSSHand::Left;
+	/** The pavement outside is 12 cm above the shop floor; feet follow it once past the front wall. */
+	float FeetZ(float X) { return FMath::Clamp((X - (TSSStoreLayout::FrontX + 25.f)) / 20.f, 0.f, 1.f) * 12.f; }
+}
+
+void ATSSCustomer::SetStreetRoute(const FVector& InApproach, const FVector& From, const FVector& To)
+{
+	Approach = InApproach;
+	StreetFrom = From;
+	StreetTo = To;
+	bStreetRoute = true;
+}
+
+TArray<FVector> ATSSCustomer::LeavePath() const
+{
+	return { Register->HubPoint, Register->DoorPoint, Approach, StreetTo };
 }
 
 ATSSCustomer::ATSSCustomer()
@@ -71,7 +87,8 @@ void ATSSCustomer::Begin(ATSSRegister* InRegister, float InSpeedScale)
 	Human->Build(FMath::RandRange(1, UTSSHumanComponent::NumIdentities()),
 		Pick(UTSSHumanComponent::Tops()), Pick(UTSSHumanComponent::Bottoms()), Pick(UTSSHumanComponent::Shoes()));
 
-	SetActorLocation(FVector(Register->SpawnPoint.X, Register->SpawnPoint.Y, CapsuleHalf));
+	if (!bStreetRoute) { Approach = StreetFrom = StreetTo = Register->SpawnPoint; }
+	SetActorLocation(FVector(StreetFrom.X, StreetFrom.Y, CapsuleHalf + FeetZ(StreetFrom.X)));
 	ChooseItem();
 }
 
@@ -181,7 +198,7 @@ void ATSSCustomer::FaceToward(const FVector& Target, float Dt)
 
 bool ATSSCustomer::MoveToward(const FVector& Target, float Dt)
 {
-	const FVector Goal(Target.X, Target.Y, CapsuleHalf);
+	const FVector Goal(Target.X, Target.Y, CapsuleHalf + FeetZ(Target.X));
 	const FVector Delta = Goal - GetActorLocation();
 	const float Dist = Delta.Size();
 	const float Step = WalkSpeed * SpeedScale * (bRunning ? 1.7f : 1.f) * Dt;
@@ -190,7 +207,9 @@ bool ATSSCustomer::MoveToward(const FVector& Target, float Dt)
 		SetActorLocation(Goal);
 		return true;
 	}
-	SetActorLocation(GetActorLocation() + Delta / Dist * Step);
+	FVector Next = GetActorLocation() + Delta / Dist * Step;
+	Next.Z = CapsuleHalf + FeetZ(Next.X);   // walk on the floor / the pavement, not through the slope between
+	SetActorLocation(Next);
 	FaceToward(Goal, Dt);
 	return false;
 }
@@ -296,7 +315,7 @@ void ATSSCustomer::ChooseItem()
 	const float Roll = FMath::FRand();
 	WantCount = Roll < 0.5f ? 1 : (Roll < 0.85f ? 2 : 3);
 	State = ETSSCustomerState::Entering;
-	StartPath({ Register->DoorPoint, Register->HubPoint, Wanted.Shelf->GetStandPoint(Wanted.Slot) });
+	StartPath({ Approach, Register->DoorPoint, Register->HubPoint, Wanted.Shelf->GetStandPoint(Wanted.Slot) });
 }
 
 void ATSSCustomer::BeginBrowsing()
@@ -406,7 +425,7 @@ void ATSSCustomer::TurnAway()
 	// Someone who has not reached the queue yet does not shop in a closed shop. Not a lost sale: the shop was shut.
 	const bool bOutside = Register && GetActorLocation().X > Register->DoorPoint.X - 40.f;
 	WalkOut(TEXT("Oh, you are closed."), false);
-	if (bOutside && Register) StartPath({ Register->SpawnPoint });   // never came in: simply turn round
+	if (bOutside && Register) StartPath({ Approach, StreetTo });   // never came in: simply turn round and walk off
 }
 
 void ATSSCustomer::WalkOut(const FString& Reason, bool bUnhappy)
@@ -431,7 +450,7 @@ void ATSSCustomer::WalkOut(const FString& Reason, bool bUnhappy)
 	bRunning = bUnhappy;   // storming out
 	Say(Reason, 3.f);
 	State = ETSSCustomerState::Leaving;
-	StartPath({ Register->HubPoint, Register->DoorPoint, Register->SpawnPoint });
+	StartPath(LeavePath());
 }
 
 bool ATSSCustomer::IsReadyToPay() const
@@ -563,7 +582,7 @@ void ATSSCustomer::FinishCheckout()
 	S.Add(Do([this]()
 	{
 		State = ETSSCustomerState::Leaving;
-		StartPath({ Register->HubPoint, Register->DoorPoint, Register->SpawnPoint });
+		StartPath(LeavePath());
 	}));
 	SetScript(MoveTemp(S));
 }

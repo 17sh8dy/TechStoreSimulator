@@ -47,6 +47,10 @@ public:
 	UFUNCTION(Exec) void TSSCustomerTest();
 	/** Debug: put the player at X Y Z facing Yaw/Pitch (for screenshots). */
 	UFUNCTION(Exec) void TSSLook(float X, float Y, float Z, float Yaw, float Pitch);
+	/** Developer: puts an empty delivery box in the hands (`TSSBox 1`) or takes it away (`TSSBox 0`). */
+	UFUNCTION(Exec) void TSSBox(int32 On);
+	/** Developer: sends some people along the pavements right now. */
+	UFUNCTION(Exec) void TSSCrowd(int32 Count);
 	/** Debug: parks one of each kind of car on the road (traffic off) so they can be photographed. */
 	UFUNCTION(Exec) void TSSTownDemo();
 	/** Debug: looks at demo car N from a good angle. Which: 0 front 3/4, 1 side, 2 rear 3/4, 3 street view down the road, 4 high. */

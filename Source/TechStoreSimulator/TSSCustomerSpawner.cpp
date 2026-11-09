@@ -2,6 +2,7 @@
 #include "TSSCustomer.h"
 #include "TSSRegister.h"
 #include "TSSShelf.h"
+#include "TSSRoad.h"
 #include "TSSBusinessSubsystem.h"
 #include "EngineUtils.h"
 
@@ -28,7 +29,7 @@ ATSSCustomerSpawner* ATSSCustomerSpawner::FindOrCreate(UWorld* World)
 	return World->SpawnActor<ATSSCustomerSpawner>(ATSSCustomerSpawner::StaticClass(), FTransform(At), P);
 }
 
-ATSSCustomer* ATSSCustomerSpawner::SpawnCustomer(float SpeedScale)
+ATSSCustomer* ATSSCustomerSpawner::SpawnCustomer(float SpeedScale, bool bFromStreet)
 {
 	UWorld* World = GetWorld();
 	ATSSRegister* Register = nullptr;
@@ -40,7 +41,23 @@ ATSSCustomer* ATSSCustomerSpawner::SpawnCustomer(float SpeedScale)
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	const FRotator Facing = bUseOwnLocation ? FRotator(0.f, GetActorRotation().Yaw, 0.f) : FRotator::ZeroRotator;   // a placed spawner decides which way shoppers face
 	ATSSCustomer* C = World->SpawnActor<ATSSCustomer>(ATSSCustomer::StaticClass(), FTransform(Facing, At + FVector(0, 0, 90)), Params);
-	if (C) C->Begin(Register, SpeedScale);
+	if (!C) return nullptr;
+	// Shoppers walk in from along the street instead of appearing at the door: they start at one end of the shop-side pavement,
+	// come up to the spawner's spot just outside, and (when they leave) walk off to either end.
+	if (const ATSSRoad* Road = bFromStreet ? ATSSRoad::Find(World) : nullptr)
+	{
+		const float Len = Road->GetLength();
+		auto EndPoint = [&](bool bFar)
+		{
+			FVector V = Road->PointAt(bFar ? Len - 80.f : 80.f, Road->RoadWidth * 0.5f + FMath::FRandRange(130.f, 250.f));
+			V.Z = 12.f;
+			return V;
+		};
+		const bool bFrom = FMath::FRand() < 0.5f;
+		const bool bTo = FMath::FRand() < 0.5f;
+		C->SetStreetRoute(At, EndPoint(bFrom), EndPoint(bTo));
+	}
+	C->Begin(Register, SpeedScale);
 	return C;
 }
 
@@ -62,5 +79,5 @@ ATSSCustomer* ATSSCustomerSpawner::TickSpawn(float DeltaTime)
 		ATSSShelf::CollectStock(GetWorld(), Stock);
 		if (Stock.Num() == 0) return nullptr;
 	}
-	return SpawnCustomer();
+	return SpawnCustomer(1.f, true);
 }

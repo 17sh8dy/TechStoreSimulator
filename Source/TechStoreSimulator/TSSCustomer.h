@@ -45,6 +45,9 @@ public:
 	virtual FString GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const override;
 	virtual void Interact(ATSSCharacter* Player, const FHitResult& Hit) override;
 
+	/** Optional, before Begin: the customer appears at From (a pavement end), walks to Approach (just outside the door), and leaves back out along the street to To. Without it they start at the register's spawn point. */
+	void SetStreetRoute(const FVector& InApproach, const FVector& From, const FVector& To);
+
 	/** Called by the spawner right after spawning. SpeedScale > 1 hurries walking and browsing (tests). */
 	void Begin(ATSSRegister* InRegister, float SpeedScale = 1.f);
 
@@ -122,6 +125,9 @@ private:
 	FVector HipPoint() const;
 
 	void StartPath(const TArray<FVector>& Points);
+	TArray<FVector> LeavePath() const;
+	FVector Approach = FVector::ZeroVector, StreetFrom = FVector::ZeroVector, StreetTo = FVector::ZeroVector;
+	bool bStreetRoute = false;
 	/** Walks the current path; true once the last point is reached. */
 	bool FollowPath(float Dt);
 	bool MoveToward(const FVector& Target, float Dt);

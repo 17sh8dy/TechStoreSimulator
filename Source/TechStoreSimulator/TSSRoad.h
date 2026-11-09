@@ -29,6 +29,8 @@ public:
 	static ATSSRoad* Find(UWorld* World);
 
 	float GetLength() const;
+	/** Where the street litter bins stand (on both pavements, front facing the road). The town spawns an ATSSBin at each. */
+	void GetBinTransforms(TArray<FTransform>& Out) const;
 	/** A point `Offset` cm to the right of the road centre at this distance (right is the shop side). */
 	FVector PointAt(float Distance, float Offset) const;
 	/** Facing (yaw only) of the road at this distance, in the direction of the spline. */

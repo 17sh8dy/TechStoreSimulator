@@ -33,6 +33,7 @@ return FText::FromString(TSSMoney::Format(Store ? Store->GetMoneyCents() : 0));
 FText UTSSHudWidget::HeldText() const
 {
 	const ATSSCharacter* Player = GetPlayer();
+	if (Player && Player->IsCarryingEmptyBox()) return FText::FromString(TEXT("Carrying an empty box (take it to a bin)"));
 	if (!Player || Player->GetHeld() == ETSSProduct::None)
 	{
 		return FText::FromString(TEXT("Hands empty"));

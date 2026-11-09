@@ -60,7 +60,7 @@ ATSSStoreShell::ATSSStoreShell()
 	CeilingFill->SetIntensity(6.f);
 	CeilingFill->SetAttenuationRadius(700.f);
 	CeilingFill->SetSourceRadius(60.f);
-	CeilingFill->SetLightColor(FLinearColor(1.f, 0.96f, 0.89f));
+	CeilingFill->SetLightColor(FLinearColor(1.f, 0.8f, 0.52f));
 	CeilingFill->SetCastShadows(false);
 
 	for (int32 i = 0; i < MaxLights; ++i)
@@ -76,8 +76,8 @@ ATSSStoreShell::ATSSStoreShell()
 		Lights[i]->SetSourceHeight(60.f);
 		Lights[i]->SetBarnDoorAngle(88.f);
 		Lights[i]->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));   // a ceiling panel shines down
-		Lights[i]->SetLightColor(FLinearColor(1.f, 0.96f, 0.89f));
-		LightPanels.Add(Box(*(TEXT("LightPanel") + N), FLinearColor(1.f, 1.f, 0.9f), false));
+		Lights[i]->SetLightColor(FLinearColor(1.f, 0.82f, 0.56f));   // warm, a little yellow
+		LightPanels.Add(Box(*(TEXT("LightPanel") + N), FLinearColor(1.f, 0.9f, 0.68f), false));
 	}
 	for (int32 i = 0; i < 4; ++i)
 	{

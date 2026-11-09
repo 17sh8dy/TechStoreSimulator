@@ -71,11 +71,14 @@ public:
 	static constexpr float StackStep = 40.f;   // height of one parcel
 	static constexpr int32 MaxStack = 7;       // 7 x 40 cm = 2.8 m, under the 3.2 m ceiling
 	int32 GetQty() const { return Qty; }
+	/** True once the last item is out: the box stays until the owner carries it to a bin. */
+	bool IsEmpty() const { return bEmpty; }
 	int32 GetOrderId() const { return OrderId; }
 	ETSSProduct GetProduct() const { return Product; }
 
 private:
 	void UpdateLabel();
+	void MakeEmpty();
 
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Body;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Tape;
@@ -83,6 +86,7 @@ private:
 	int32 OrderId = 0;
 	ETSSProduct Product = ETSSProduct::None;
 	int32 Qty = 0;
+	bool bEmpty = false;
 };
 
 /** A delivery truck: drives in, parks, a courier carries the parcels into the shop, then it leaves. */

@@ -5,6 +5,9 @@
 #include "TSSMover.h"
 #include "TSSHumanComponent.h"
 #include "TSSProductBox.h"
+#include "TSSBin.h"
+#include "TSSShopDoor.h"
+#include "TSSProducts.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -44,6 +47,30 @@ ATSSCharacter::ATSSCharacter()
 	HeldMesh->SetVisibility(false, true);
 
 	Mover = CreateDefaultSubobject<UTSSMoverComponent>(TEXT("Mover"));
+
+	// The emptied cardboard box you carry to the bin: open top, two flaps.
+	auto MakePart = [this](const TCHAR* Name, UStaticMeshComponent* Parent, FVector Loc, FVector Scale, FRotator Rot)
+	{
+		UStaticMeshComponent* P = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		P->SetupAttachment(Parent);
+		P->SetStaticMesh(TSSCubeMesh());
+		P->SetRelativeLocation(Loc);
+		P->SetRelativeRotation(Rot);
+		P->SetRelativeScale3D(Scale);
+		P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		P->SetCastShadow(false);
+		return P;
+	};
+	EmptyBoxMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("EmptyBox"));
+	EmptyBoxMesh->SetupAttachment(GetCapsuleComponent());
+	EmptyBoxMesh->SetStaticMesh(TSSCubeMesh());
+	EmptyBoxMesh->SetRelativeScale3D(FVector(0.3f, 0.38f, 0.2f));
+	EmptyBoxMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	EmptyBoxMesh->SetCastShadow(false);
+	EmptyBoxMesh->SetVisibility(false, true);
+	EmptyBoxParts.Add(MakePart(TEXT("EmptyBoxInside"), EmptyBoxMesh, FVector(0.f, 0.f, 0.5f), FVector(0.86f, 0.9f, 0.02f), FRotator::ZeroRotator));
+	EmptyBoxParts.Add(MakePart(TEXT("EmptyBoxFlapA"), EmptyBoxMesh, FVector(0.f, 0.62f, 0.62f), FVector(0.95f, 0.5f, 0.02f), FRotator(0.f, 0.f, 55.f)));
+	EmptyBoxParts.Add(MakePart(TEXT("EmptyBoxFlapB"), EmptyBoxMesh, FVector(0.f, -0.62f, 0.62f), FVector(0.95f, 0.5f, 0.02f), FRotator(0.f, 0.f, -55.f)));
 }
 
 void ATSSCharacter::BeginPlay()
@@ -54,6 +81,10 @@ void ATSSCharacter::BeginPlay()
 		SettingsHandle = Settings->OnChanged.AddUObject(this, &ATSSCharacter::ApplyView);
 	}
 	Human->Build(2, TEXT("crewneck"), TEXT("jeansLong"), TEXT("oxfords"));
+	TSSApplyColor(EmptyBoxMesh, FLinearColor(0.58f, 0.42f, 0.24f));
+	TSSApplyColor(EmptyBoxParts[0], FLinearColor(0.12f, 0.085f, 0.05f));
+	TSSApplyColor(EmptyBoxParts[1], FLinearColor(0.62f, 0.46f, 0.27f));
+	TSSApplyColor(EmptyBoxParts[2], FLinearColor(0.62f, 0.46f, 0.27f));
 	ApplyView();
 }
 
@@ -107,6 +138,13 @@ void ATSSCharacter::SetHeld(ETSSProduct Product)
 	HeldMesh->SetVisibility(true, true);
 }
 
+void ATSSCharacter::SetCarryingEmptyBox(bool bCarry)
+{
+	bEmptyBox = bCarry;
+	EmptyBoxMesh->SetVisibility(bCarry, true);
+	if (bCarry) EmptyBoxMesh->SetRelativeLocation(FVector(46.f, 16.f, 2.f));   // in front of the chest (first person keeps it here)
+}
+
 void ATSSCharacter::InteractWith(ATSSInteractable* Target, const FHitResult& Hit)
 {
 	if (!Target) return;
@@ -154,12 +192,15 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 	GetCharacterMovement()->MaxWalkSpeed = SpeedFor(PC->IsInputKeyDown(SprintKey));   // hold the sprint key (Shift by default) to hurry
 	Human->SetSpeed(GetVelocity().Size2D());
 	UpdateFocus(PC);
+	// Carrying an empty box: the hands are full, so only a bin (to throw it away) and the shop door answer E.
+	const bool bBlocked = bEmptyBox && Focus && !Focus->IsA(ATSSBin::StaticClass()) && !Focus->IsA(ATSSShopDoor::StaticClass());
+	if (bBlocked) FocusPrompt = TEXT("Your hands are full: carry the empty box to a bin outside");
 	// Hold E on a shelf or the StoreDesk computer to pick it up and move it (a quick tap still does its normal action).
-	const bool bMoving = Mover->Update(PC, this, Focus, FocusHit, DeltaSeconds);
-	const FString MoverPrompt = Mover->GetPrompt();
+	const bool bMoving = bBlocked ? false : Mover->Update(PC, this, Focus, FocusHit, DeltaSeconds);
+	const FString MoverPrompt = bBlocked ? FString() : Mover->GetPrompt();
 	if (!MoverPrompt.IsEmpty()) FocusPrompt = MoverPrompt;
-	else if (Focus && Focus->IsMovable() && !FocusPrompt.IsEmpty()) FocusPrompt += TEXT("\n(hold E for 2 seconds to move it)");
-	if (Focus && !bMoving)
+	else if (!bBlocked && Focus && Focus->IsMovable() && !FocusPrompt.IsEmpty()) FocusPrompt += TEXT("\n(hold E for 2 seconds to move it)");
+	if (Focus && !bMoving && !bBlocked)
 	{
 		if (!Focus->IsMovable() && PC->WasInputKeyJustPressed(EKeys::E)) InteractWith(Focus, FocusHit);
 		// Left click does what a tap of E does, on anything (a click never starts a move: that stays a hold of E).
@@ -191,7 +232,7 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 	}
 	if (GestureTimer <= 0.f)
 	{
-		if (Held != ETSSProduct::None)
+		if (Held != ETSSProduct::None || bEmptyBox)
 		{
 			const FVector Carry = GetActorLocation() + GetActorForwardVector() * 38.f + GetActorRightVector() * 14.f + FVector(0.f, 0.f, 22.f);
 			Human->Reach(ETSSHand::Right, Carry, 0.3f);
@@ -202,6 +243,11 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 		}
 	}
 	// In third person the box is really in your hand; in first person it stays steady in view.
+	if (bEmptyBox && !bFirstPersonView)
+	{
+		const FRotator Rot(0.f, GetActorRotation().Yaw, 0.f);
+		EmptyBoxMesh->SetWorldLocationAndRotation(Human->GetHandWorldLocation(ETSSHand::Right) + Rot.Vector() * 20.f + FVector(0.f, 0.f, 4.f), Rot);
+	}
 	if (Held != ETSSProduct::None && !bFirstPersonView)
 	{
 		const FRotator Rot(0.f, GetActorRotation().Yaw, 0.f);

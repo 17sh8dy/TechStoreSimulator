@@ -106,7 +106,8 @@ void ATSSParcel::Tick(float DeltaSeconds)
 
 FString ATSSParcel::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit) const
 {
-	if (Player->GetHeld() != ETSSProduct::None || Player->GetHeldItem()) return TEXT("Your hands are full");
+	if (Player->GetHeld() != ETSSProduct::None || Player->GetHeldItem() || Player->IsCarryingEmptyBox()) return TEXT("Your hands are full");
+	if (bEmpty) return TEXT("[E / Click] Pick up the empty box  (take it to a bin outside)");
 	FString Out = FString::Printf(TEXT("[E / Click] Unpack a %s  (%d left in this box)"), TSSProductDef(Product).Name, Qty);
 	if (const UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>())
 	{
@@ -118,7 +119,7 @@ FString ATSSParcel::GetPrompt(const ATSSCharacter* Player, const FHitResult& Hit
 void ATSSParcel::Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Direction)
 {
 	UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>();
-	if (!Biz || Qty <= 0 || !Biz->StoreInBackRoom(Product, Qty)) return;
+	if (!Biz || bEmpty || Qty <= 0 || !Biz->StoreInBackRoom(Product, Qty)) return;
 	const int32 Moved = Qty;
 	Qty = 0;
 	for (int32 i = 0; i < Moved; ++i) Biz->OnUnitUnloaded(OrderId);
@@ -127,12 +128,29 @@ void ATSSParcel::Adjust(ATSSCharacter* Player, const FHitResult& Hit, int32 Dire
 
 void ATSSParcel::Interact(ATSSCharacter* Player, const FHitResult& Hit)
 {
-	if (Qty <= 0 || Player->GetHeld() != ETSSProduct::None || Player->GetHeldItem()) return;
+	if (Player->GetHeld() != ETSSProduct::None || Player->GetHeldItem() || Player->IsCarryingEmptyBox()) return;
+	if (bEmpty)
+	{
+		// The empty box is picked up and has to be carried to a bin; it does not just vanish.
+		Player->SetCarryingEmptyBox(true);
+		Destroy();
+		return;
+	}
+	if (Qty <= 0) return;
 	Player->SetHeld(Product);
 	--Qty;
 	if (UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz->OnUnitUnloaded(OrderId);
-	if (Qty <= 0) Destroy();
+	if (Qty <= 0) MakeEmpty();
 	else UpdateLabel();
+}
+
+void ATSSParcel::MakeEmpty()
+{
+	bEmpty = true;
+	Qty = 0;
+	Tape->SetVisibility(false);
+	TSSApplyColor(Body, FLinearColor(0.5f, 0.36f, 0.2f));
+	Label->SetText(FText::FromString(TEXT("EMPTY")));
 }
 
 // ---- parcel stacking ------------------------------------------------------------------------------------

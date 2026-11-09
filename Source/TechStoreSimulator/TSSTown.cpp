@@ -4,6 +4,8 @@
 #include "TSSDeliveryActors.h"
 #include "TSSStoreSubsystem.h"
 #include "TSSTownBackdrop.h"
+#include "TSSBin.h"
+#include "TSSPasserby.h"
 #include "EngineUtils.h"
 
 namespace
@@ -31,6 +33,15 @@ void UTSSTownSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 		if (ATSSTownBackdrop* Back = InWorld.SpawnActor<ATSSTownBackdrop>(ATSSTownBackdrop::StaticClass(), FTransform::Identity))
 			Back->Build(Road.Get());
 	}
+	if (Road.IsValid() && !FParse::Param(FCommandLine::Get(), TEXT("TSSNoBins")))
+	{
+		TArray<FTransform> Spots;
+		Road->GetBinTransforms(Spots);
+		FActorSpawnParameters P;
+		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		for (const FTransform& S : Spots) InWorld.SpawnActor<ATSSBin>(ATSSBin::StaticClass(), S, P);
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("TSSNoPeople"))) bPeople = false;
 	RefreshNight();
 }
 
@@ -142,10 +153,52 @@ void UTSSTownSubsystem::TickTraffic(float Dt)
 	}
 }
 
+int32 UTSSTownSubsystem::PasserbyCount() const
+{
+	int32 N = 0;
+	for (const TWeakObjectPtr<ATSSPasserby>& P : People) if (P.IsValid()) ++N;
+	return N;
+}
+
+ATSSPasserby* UTSSTownSubsystem::SpawnPasserby(bool bShopSide, bool bForward, bool bPauseAtShop)
+{
+	const ATSSRoad* R = Road.Get();
+	if (!R) return nullptr;
+	const float Len = R->GetLength();
+	const float Off = (bShopSide ? 1.f : -1.f) * (R->RoadWidth * 0.5f + FMath::FRandRange(110.f, 270.f));
+	const float D0 = bForward ? 60.f : Len - 60.f, D1 = bForward ? Len - 60.f : 60.f;
+	const float Dm = bPauseAtShop ? R->GetCrosswalkDistance() + 500.f : FMath::FRandRange(0.3f, 0.7f) * Len;   // the shop is roughly across from the middle of the road
+	auto Feet = [](FVector V) { V.Z = 12.f; return V; };
+	TArray<FVector> Path = { Feet(R->PointAt(D0, Off)), Feet(R->PointAt(Dm, Off)), Feet(R->PointAt(D1, Off)) };
+	FActorSpawnParameters P;
+	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ATSSPasserby* Person = GetWorld()->SpawnActor<ATSSPasserby>(ATSSPasserby::StaticClass(), FTransform(Path[0]), P);
+	if (!Person) return nullptr;
+	const bool bPause = bShopSide && bPauseAtShop;
+	Person->Begin(Path, FMath::FRandRange(105.f, 165.f), bPause ? 1 : INDEX_NONE, FMath::FRandRange(2.5f, 5.f), FVector(740.f, Path[1].Y, 150.f));
+	People.Add(Person);
+	return Person;
+}
+
+void UTSSTownSubsystem::TickPeople(float Dt)
+{
+	if (!Road.IsValid() || !bPeople) return;
+	const UTSSStoreSubsystem* Store = GetWorld()->GetSubsystem<UTSSStoreSubsystem>();
+	if (Store && Store->IsSimPaused()) return;
+	People.RemoveAll([](const TWeakObjectPtr<ATSSPasserby>& P) { return !P.IsValid(); });
+	NextPerson -= Dt;
+	if (NextPerson > 0.f) return;
+	NextPerson = FMath::FRandRange(4.f, 11.f) * (bNight ? 2.2f : 1.f);
+	if (People.Num() >= 7) return;
+	const bool bShopSide = FMath::FRand() < 0.6f;
+	SpawnPasserby(bShopSide, FMath::FRand() < 0.5f, bShopSide && FMath::FRand() < 0.3f);
+}
+
 void UTSSTownSubsystem::Tick(float Dt)
 {
 	Super::Tick(Dt);
 	NightCheck -= Dt;
 	if (NightCheck <= 0.f) { NightCheck = 1.f; RefreshNight(); }
 	TickTraffic(Dt);
+	TickPeople(Dt);
 }

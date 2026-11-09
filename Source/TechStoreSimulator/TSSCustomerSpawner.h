@@ -25,8 +25,11 @@ public:
 
 	/** Counts the timer down and spawns when it reaches zero (and the checks pass). Returns the new customer or null. */
 	ATSSCustomer* TickSpawn(float DeltaTime);
-	/** Spawns one customer now, ignoring gaps/limits. Null if the map has no register. */
-	ATSSCustomer* SpawnCustomer(float SpeedScale = 1.f);
+	/**
+	 * Spawns one customer now, ignoring gaps/limits. Null if the map has no register. With bFromStreet they appear at an end of the
+	 * pavement and walk up to the shop (and leave along the street again); otherwise (tests) they appear at the spawner.
+	 */
+	ATSSCustomer* SpawnCustomer(float SpeedScale = 1.f, bool bFromStreet = false);
 
 	/** Use the spawner's own location instead of the register's SpawnPoint. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawner") bool bUseOwnLocation = false;

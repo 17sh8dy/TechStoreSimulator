@@ -38,6 +38,10 @@ public:
 	/** Pass None to empty the hands. */
 	void SetHeld(ETSSProduct Product);
 
+	/** An emptied delivery box carried to a bin: the hands are full of it until it is thrown away. */
+	bool IsCarryingEmptyBox() const { return bEmptyBox; }
+	void SetCarryingEmptyBox(bool bCarry);
+
 	/** Presses E on something: its action plus the little reach gesture. */
 	void InteractWith(ATSSInteractable* Target, const FHitResult& Hit);
 	UTSSMoverComponent* GetMover() const { return Mover; }
@@ -58,6 +62,9 @@ private:
 	UPROPERTY() TObjectPtr<UTSSHumanComponent> Human;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTSSProductBoxComponent> HeldMesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTSSMoverComponent> Mover;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> EmptyBoxMesh;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> EmptyBoxParts;
+	bool bEmptyBox = false;
 
 	ETSSProduct Held = ETSSProduct::None;
 	float GestureTimer = 0.f;

@@ -1,6 +1,8 @@
 #include "TSSTownBackdrop.h"
 #include "TSSRoad.h"
 #include "TSSProducts.h"
+#include "TSSStreetProps.h"
+#include "ProceduralMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 
 ATSSTownBackdrop::ATSSTownBackdrop()
@@ -112,18 +114,38 @@ void ATSSTownBackdrop::Build(const ATSSRoad* Road)
 
 	// Trees: along the carried-on pavements, and clumps in the gaps further out.
 	static const FLinearColor Leaves[] = { FLinearColor(0.1f, 0.3f, 0.07f), FLinearColor(0.16f, 0.36f, 0.08f), FLinearColor(0.34f, 0.4f, 0.07f), FLinearColor(0.12f, 0.27f, 0.1f) };
+	// Far trees are cheap instanced clumps (several leaf blobs in different shades on a slim trunk); the ones you can walk up to are the detailed procedural trees.
 	auto Tree = [&](const FVector& Base, float Scale)
 	{
 		const float H = 360.f * Scale;
 		const FLinearColor Leaf = Leaves[Rnd.RandRange(0, UE_ARRAY_COUNT(Leaves) - 1)];
-		Inst(Cyl, FLinearColor(0.2f, 0.14f, 0.09f), Base + FVector(0.f, 0.f, H * 0.5f), FRotator::ZeroRotator, FVector(22.f, 22.f, H) * Scale);
-		Inst(Ball, Leaf, Base + FVector(0.f, 0.f, H + 80.f * Scale), FRotator::ZeroRotator, FVector(300.f, 300.f, 260.f) * Scale);
-		Inst(Ball, Leaf * 0.88f, Base + FVector(60.f, 50.f, H + 10.f * Scale), FRotator::ZeroRotator, FVector(210.f, 210.f, 190.f) * Scale);
+		Inst(Cyl, FLinearColor(0.18f, 0.125f, 0.08f), Base + FVector(0.f, 0.f, H * 0.5f), FRotator::ZeroRotator, FVector(20.f, 20.f, H) * Scale);
+		for (int32 K = 0; K < 6; ++K)
+		{
+			const float A = Rnd.FRand() * 6.28f, Rd = (K == 0 ? 0.f : 80.f) * Scale;
+			const float Dia = Rnd.FRandRange(150.f, 210.f) * Scale;
+			Inst(Ball, Leaf * Rnd.FRandRange(0.75f, 1.2f), Base + FVector(FMath::Cos(A) * Rd, FMath::Sin(A) * Rd, H + (K == 0 ? 90.f : Rnd.FRandRange(10.f, 150.f)) * Scale),
+				FRotator::ZeroRotator, FVector(Dia, Dia, Dia * 0.85f));
+		}
+	};
+	int32 NearSeed = 0;
+	auto NearTree = [&](const FVector& Base)
+	{
+		UProceduralMeshComponent* T = NewObject<UProceduralMeshComponent>(this);
+		T->SetupAttachment(GetRootComponent());
+		T->RegisterComponent();
+		T->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		T->SetWorldLocationAndRotation(Base, FRotator(0.f, NearSeed * 47.f, 0.f));
+		TSSStreet::BuildTree(T, 200 + NearSeed, 330.f + 55.f * (NearSeed % 3));
+		++NearSeed;
 	};
 	for (float Dir : { -1.f, 1.f })
 		for (float S : { -1.f, 1.f })
 			for (float U = 300.f; U < FarEnd * 0.75f; U += 1300.f)
-				Tree(W(Dir * (Half + U), S * (RoadW * 0.5f + 70.f), 12.f), 1.f);
+			{
+				if (U < 4200.f) NearTree(W(Dir * (Half + U), S * (RoadW * 0.5f + 70.f), 12.f));
+				else Tree(W(Dir * (Half + U), S * (RoadW * 0.5f + 70.f), 12.f), 1.f);
+			}
 	for (int32 I = 0, Placed = 0; I < 600 && Placed < 90; ++I)
 	{
 		const float Ang = Rnd.FRand() * 2.f * PI, Rad = FMath::Lerp(3300.f, 14000.f, Rnd.FRand());
