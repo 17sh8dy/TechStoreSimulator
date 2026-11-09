@@ -5,8 +5,9 @@
 #include "TSSCustomerSubsystem.generated.h"
 
 class ATSSCustomer;
+class ATSSCustomerSpawner;
 
-/** Sends shoppers through the door while the shop has something on its shelves. */
+/** Decides when shoppers may come in (shop open, not paused) and ticks the world's ATSSCustomerSpawner, which does the spawning. */
 UCLASS()
 class UTSSCustomerSubsystem : public UTickableWorldSubsystem
 {
@@ -25,10 +26,7 @@ public:
 
 	/** Off in the self-test so it can control exactly who walks in. */
 	bool bAutoSpawn = true;
-	int32 MaxCustomers = 3;
-	float MinGap = 9.f;
-	float MaxGap = 20.f;
 
-private:
-	float NextSpawnIn = 5.f;
+	/** The ATSSCustomerSpawner that holds the numbers (max customers, gaps, spawn point); one is created if the map has none. */
+	ATSSCustomerSpawner* GetSpawner();
 };
