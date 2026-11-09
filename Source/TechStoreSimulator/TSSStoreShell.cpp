@@ -3,6 +3,7 @@
 #include "TSSProducts.h"
 #include "TSSStoreLayout.h"
 #include "Components/PointLightComponent.h"
+#include "Components/RectLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "EngineUtils.h"
@@ -20,9 +21,9 @@ ATSSStoreShell::ATSSStoreShell()
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
 
-	const FLinearColor Wall(0.88f, 0.88f, 0.9f);
+	const FLinearColor Wall(0.62f, 0.62f, 0.65f);
 	Floor = Box(TEXT("Floor"), FLinearColor(0.42f, 0.44f, 0.48f));
-	Ceiling = Box(TEXT("Ceiling"), FLinearColor(0.95f, 0.95f, 0.97f));
+	Ceiling = Box(TEXT("Ceiling"), FLinearColor(0.72f, 0.72f, 0.75f));
 	WallBack = Box(TEXT("WallBack"), Wall);
 	WallLeft = Box(TEXT("WallLeft"), Wall);
 	WallRight = Box(TEXT("WallRight"), Wall);
@@ -46,21 +47,35 @@ ATSSStoreShell::ATSSStoreShell()
 	SignLight->SetupAttachment(Root);
 	SignLight->SetMobility(EComponentMobility::Movable);
 	SignLight->SetIntensityUnits(ELightUnits::Lumens);
-	SignLight->SetIntensity(9000.f);
-	SignLight->SetAttenuationRadius(900.f);
+	SignLight->SetIntensity(2200.f);
+	SignLight->SetAttenuationRadius(260.f)   /* short: it casts no shadow, so a long reach would light the shop through the wall */;
 	SignLight->SetLightColor(FLinearColor(0.62f, 0.8f, 1.f));
 	SignLight->SetCastShadows(false);
 	SignLight->SetVisibility(false);
 
+	CeilingFill = CreateDefaultSubobject<UPointLightComponent>(TEXT("CeilingFill"));
+	CeilingFill->SetupAttachment(Root);
+	CeilingFill->SetMobility(EComponentMobility::Movable);
+	CeilingFill->SetIntensityUnits(ELightUnits::Lumens);
+	CeilingFill->SetIntensity(6.f);
+	CeilingFill->SetAttenuationRadius(700.f);
+	CeilingFill->SetSourceRadius(60.f);
+	CeilingFill->SetLightColor(FLinearColor(1.f, 0.96f, 0.89f));
+	CeilingFill->SetCastShadows(false);
+
 	for (int32 i = 0; i < MaxLights; ++i)
 	{
 		const FString N = FString::FromInt(i);
-		Lights.Add(CreateDefaultSubobject<UPointLightComponent>(*(TEXT("Light") + N)));
+		Lights.Add(CreateDefaultSubobject<URectLightComponent>(*(TEXT("RectLight") + N)));
 		Lights[i]->SetupAttachment(Root);
 		Lights[i]->SetMobility(EComponentMobility::Movable); // static lights would need a bake
 		Lights[i]->SetIntensityUnits(ELightUnits::Lumens);
-		Lights[i]->SetIntensity(300.f);
-		Lights[i]->SetAttenuationRadius(700.f);
+		Lights[i]->SetIntensity(32.f);
+		Lights[i]->SetAttenuationRadius(800.f);
+		Lights[i]->SetSourceWidth(120.f);
+		Lights[i]->SetSourceHeight(60.f);
+		Lights[i]->SetBarnDoorAngle(88.f);
+		Lights[i]->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));   // a ceiling panel shines down
 		Lights[i]->SetLightColor(FLinearColor(1.f, 0.96f, 0.89f));
 		LightPanels.Add(Box(*(TEXT("LightPanel") + N), FLinearColor(1.f, 1.f, 0.9f), false));
 	}
@@ -148,17 +163,19 @@ void ATSSStoreShell::Layout(int32 Stage)
 		PosterTexts[i]->SetRelativeLocation(FVector(Bx + 5.2f, Y, 190.f));
 	}
 
+	CeilingFill->SetRelativeLocation(FVector(Cx, 0.f, WallH - 110.f));
 	// Ceiling lights: more of them as the shop grows.
 	const int32 Cols = LightColumns(Stage);
 	for (int32 i = 0; i < MaxLights; ++i)
 	{
 		const bool bOn = i < Cols * 2;
+		if (!Lights[i]) continue;
 		Lights[i]->SetVisibility(bOn);
 		LightPanels[i]->SetVisibility(bOn);
 		if (!bOn) continue;
 		const float X = Bx + (i % Cols + 0.5f) * (L / Cols);
 		const float Y = (i / Cols == 0 ? -1.f : 1.f) * Hw * 0.5f;
-		Lights[i]->SetRelativeLocation(FVector(X, Y, WallH - 40.f));
+		Lights[i]->SetRelativeLocation(FVector(X, Y, WallH - 6.f));
 		Place(LightPanels[i], FVector(X, Y, WallH - 1.f), FVector(120.f, 60.f, 3.f));
 	}
 }

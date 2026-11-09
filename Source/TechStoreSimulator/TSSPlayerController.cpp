@@ -94,6 +94,28 @@ void ATSSPlayerController::BeginPlay()
 				At(6.5f, TEXT("QUIT_EDITOR"));
 			}, 1.0f, false);
 		}
+		// `-TSSLightShots`: photographs the shop interior at noon, dusk and night (for tuning the lighting), then quits.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSLightShots")))
+		{
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, [this]()
+			{
+				TSSStart();
+				auto At = [this](float Delay, FString Cmd)
+				{
+					FTimerHandle T;
+					GetWorldTimerManager().SetTimer(T, [this, Cmd]() { ConsoleCommand(Cmd); }, Delay, false);
+				};
+				float T = 0.5f;
+				for (float Hour : { 12.f, 2.f, 21.5f })
+				{
+					At(T, FString::Printf(TEXT("TSSTime %.1f"), Hour)); T += 1.0f;
+					At(T, TEXT("TSSLook 330 0 150 180 -8")); T += 1.3f;  At(T, TEXT("Shot ShowUI")); T += 1.0f;
+					At(T, TEXT("TSSLook 380 0 150 0 -8")); T += 1.3f;   At(T, TEXT("Shot ShowUI")); T += 1.0f;
+				}
+				At(T + 0.5f, TEXT("QUIT_EDITOR"));
+			}, 1.0f, false);
+		}
 		// `-TSSStreetShots`: sends a truck down the road and photographs it, then quits (for looking at the street).
 	if (FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")))
 	{

@@ -38,7 +38,8 @@ ATSSCustomer* ATSSCustomerSpawner::SpawnCustomer(float SpeedScale)
 	const FVector At = bUseOwnLocation ? GetActorLocation() : Register->SpawnPoint;
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	ATSSCustomer* C = World->SpawnActor<ATSSCustomer>(ATSSCustomer::StaticClass(), FTransform(At + FVector(0, 0, 90)), Params);
+	const FRotator Facing = bUseOwnLocation ? FRotator(0.f, GetActorRotation().Yaw, 0.f) : FRotator::ZeroRotator;   // a placed spawner decides which way shoppers face
+	ATSSCustomer* C = World->SpawnActor<ATSSCustomer>(ATSSCustomer::StaticClass(), FTransform(Facing, At + FVector(0, 0, 90)), Params);
 	if (C) C->Begin(Register, SpeedScale);
 	return C;
 }

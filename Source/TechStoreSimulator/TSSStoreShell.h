@@ -5,6 +5,7 @@
 #include "TSSStoreShell.generated.h"
 
 class UPointLightComponent;
+class URectLightComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
 
@@ -42,6 +43,7 @@ private:
 
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
 	UPROPERTY() TObjectPtr<class UPointLightComponent> SignLight;
+	UPROPERTY(Transient) TObjectPtr<class UPointLightComponent> CeilingFill;   // soft bounce so the ceiling is not black
 	bool bSignLightOn = false;
 	TArray<FLinearColor> PartColors;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Floor;
@@ -57,7 +59,7 @@ private:
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> SignBoard;
 	UPROPERTY() TObjectPtr<UTextRenderComponent> SignText;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> LightPanels;
-	UPROPERTY() TArray<TObjectPtr<UPointLightComponent>> Lights;
+	UPROPERTY(Transient) TArray<TObjectPtr<URectLightComponent>> Lights;   // Transient: the map must not keep stale pointers from an older light type
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Skirting;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Posters;
 	UPROPERTY() TArray<TObjectPtr<UTextRenderComponent>> PosterTexts;
