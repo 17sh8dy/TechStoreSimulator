@@ -49,6 +49,8 @@ public:
 	UFUNCTION(Exec) void TSSLook(float X, float Y, float Z, float Yaw, float Pitch);
 	/** Developer: puts an empty delivery box in the hands (`TSSBox 1`) or takes it away (`TSSBox 0`). */
 	UFUNCTION(Exec) void TSSBox(int32 On);
+	/** Developer: looks at the customer PIN pad from the customer side, this far away (cm). */
+	UFUNCTION(Exec) void TSSPadLook(float Dist);
 	/** Developer: sends some people along the pavements right now. */
 	UFUNCTION(Exec) void TSSCrowd(int32 Count);
 	/** Debug: parks one of each kind of car on the road (traffic off) so they can be photographed. */

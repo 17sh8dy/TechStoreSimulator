@@ -366,6 +366,20 @@ ATSSCardTerminal::ATSSCardTerminal()
 	{
 		Box(*FString::Printf(TEXT("PadKey%d"), d), PadPlate.TransformPosition(PadKeyLocal(d)), FVector(2.0f, 2.2f, 0.5f), d == 0 ? FLinearColor(0.7f, 0.72f, 0.76f) : FLinearColor(0.46f, 0.48f, 0.52f), PadTilt);
 	}
+	// Digits printed on the keys, reading upright for the customer (who stands on the -X side, so 1-2-3 is the far row).
+	for (int32 k = 0; k < 10; ++k)
+	{
+		UTextRenderComponent* Label = CreateDefaultSubobject<UTextRenderComponent>(*FString::Printf(TEXT("PadLabel%d"), k));
+		Label->SetupAttachment(GetRootComponent());
+		Label->SetRelativeLocation(PadPlate.TransformPosition(PadKeyLocal(k) + FVector(0.f, 0.f, 0.4f)));
+		Label->SetRelativeRotation((PadPlate.GetRotation() * FRotator(90.f, 180.f, 0.f).Quaternion()).Rotator());
+		Label->SetWorldSize(1.9f);
+		Label->SetHorizontalAlignment(EHTA_Center);
+		Label->SetVerticalAlignment(EVRTA_TextCenter);
+		Label->SetTextRenderColor(FColor(15, 17, 24));
+		Label->SetText(FText::FromString(FString::FromInt(k)));
+		Label->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 	Card = Box(TEXT("Card"), CardFrom, FVector(8.5f, 5.4f, 0.3f), FLinearColor(0.1f, 0.3f, 0.8f));
 	Card->SetVisibility(false);
 

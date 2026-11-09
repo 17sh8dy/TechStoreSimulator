@@ -113,7 +113,7 @@ void UTSSBusinessSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	// The automated test works on a throwaway slot, so it can never touch a real save.
 	// -TSSStreetShots (the screenshot helper) moves the clock around, so it must never touch a real save either.
-	const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest")) || FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSTownShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSDoorShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSPayShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSLightShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSLifeShots"));
+	const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("TSSAutoTest")) || FParse::Param(FCommandLine::Get(), TEXT("TSSStreetShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSTownShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSDoorShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSPayShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSLightShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSLifeShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSPadShots")) || FParse::Param(FCommandLine::Get(), TEXT("TSSWalkShots"));
 	SlotName = bTest ? TEXT("TSSAutoTest") : TEXT("TSSBusiness");
 	if (bTest) UGameplayStatics::DeleteGameInSlot(SlotName, 0);
 

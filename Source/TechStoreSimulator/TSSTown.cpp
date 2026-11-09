@@ -175,7 +175,7 @@ ATSSPasserby* UTSSTownSubsystem::SpawnPasserby(bool bShopSide, bool bForward, bo
 	ATSSPasserby* Person = GetWorld()->SpawnActor<ATSSPasserby>(ATSSPasserby::StaticClass(), FTransform(Path[0]), P);
 	if (!Person) return nullptr;
 	const bool bPause = bShopSide && bPauseAtShop;
-	Person->Begin(Path, FMath::FRandRange(105.f, 165.f), bPause ? 1 : INDEX_NONE, FMath::FRandRange(2.5f, 5.f), FVector(740.f, Path[1].Y, 150.f));
+	Person->Begin(Path, FMath::FRandRange(175.f, 220.f), bPause ? 1 : INDEX_NONE, FMath::FRandRange(2.5f, 5.f), FVector(740.f, Path[1].Y, 150.f));
 	People.Add(Person);
 	return Person;
 }

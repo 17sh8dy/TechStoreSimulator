@@ -175,7 +175,7 @@ FText UTSSTerminalWidget::CardText() const
 	if (!Reg.IsValid() || !Reg->HasCard()) return FText::GetEmpty();
 	const FTSSBankCard& C = Reg->GetCard();
 	FString Out = FString::Printf(TEXT("%s DEBIT\n%s\nEXP %s"), *C.Network, *C.Masked(), *C.Expiry());
-	if (Reg->GetPhase() == ETSSCheckoutPhase::CardPin) Out += FString::Printf(TEXT("\n\nPIN  %s"), *TSSCards::PinDots(Reg->GetPinTyped()));
+	if (Reg->GetPhase() == ETSSCheckoutPhase::CardPin) Out += FString::Printf(TEXT("\n\nPIN  %s   %d/4"), *TSSCards::PinDots(Reg->GetPinTyped()), FMath::Clamp(Reg->GetPinTyped(), 0, 4));
 	return FText::FromString(Out);
 }
 

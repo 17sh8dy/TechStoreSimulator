@@ -85,6 +85,7 @@ void ATSSCharacter::BeginPlay()
 	TSSApplyColor(EmptyBoxParts[0], FLinearColor(0.12f, 0.085f, 0.05f));
 	TSSApplyColor(EmptyBoxParts[1], FLinearColor(0.62f, 0.46f, 0.27f));
 	TSSApplyColor(EmptyBoxParts[2], FLinearColor(0.62f, 0.46f, 0.27f));
+	SetCarryingEmptyBox(false);   // starts hidden (the constructor's hidden flag does not stick)
 	ApplyView();
 }
 

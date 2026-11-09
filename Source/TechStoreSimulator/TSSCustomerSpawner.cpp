@@ -57,6 +57,7 @@ ATSSCustomer* ATSSCustomerSpawner::SpawnCustomer(float SpeedScale, bool bFromStr
 		const bool bTo = FMath::FRand() < 0.5f;
 		C->SetStreetRoute(At, EndPoint(bFrom), EndPoint(bTo));
 	}
+	if (!bFromStreet) C->WalkSpeed = 140.f;   // test / debug spawns keep the old slow pace: the self-test runs them at 8x and times door swings against it
 	C->Begin(Register, SpeedScale);
 	return C;
 }

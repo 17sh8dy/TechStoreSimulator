@@ -120,6 +120,42 @@ void ATSSPlayerController::BeginPlay()
 				At(T + 0.5f, TEXT("QUIT_EDITOR"));
 			}, 1.0f, false);
 		}
+		// `-TSSPadShots`: close looks at the customer PIN pad (key digits), then quits.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSPadShots")))
+		{
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, [this]()
+			{
+				TSSStart();
+				auto At = [this](float Delay, FString Cmd)
+				{
+					FTimerHandle T;
+					GetWorldTimerManager().SetTimer(T, [this, Cmd]() { ConsoleCommand(Cmd); }, Delay, false);
+				};
+				At(0.5f, TEXT("TSSPadLook 45"));  At(2.0f, TEXT("Shot ShowUI"));
+				At(2.6f, TEXT("TSSPadLook 90"));  At(4.0f, TEXT("Shot ShowUI"));
+				At(4.6f, TEXT("QUIT_EDITOR"));
+			}, 1.0f, false);
+		}
+		// `-TSSWalkShots`: a passer-by walks up the pavement and is photographed from the side, to judge the stride, then quits.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSWalkShots")))
+		{
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, [this]()
+			{
+				TSSStart();
+				auto At = [this](float Delay, FString Cmd)
+				{
+					FTimerHandle T;
+					GetWorldTimerManager().SetTimer(T, [this, Cmd]() { ConsoleCommand(Cmd); }, Delay, false);
+				};
+				At(0.1f, TEXT("TSSTime 12"));
+				At(0.2f, TEXT("TSSCrowd 1"));
+				At(0.3f, TEXT("TSSLook 780 -150 165 90 -2"));
+				for (int32 i = 0; i < 6; ++i) At(12.8f + 0.4f * i, TEXT("Shot ShowUI"));
+				At(16.5f, TEXT("QUIT_EDITOR"));
+			}, 1.0f, false);
+		}
 		// `-TSSLifeShots`: trees, a bin, people on the pavement and the empty box in hand, then quits.
 		if (FParse::Param(FCommandLine::Get(), TEXT("TSSLifeShots")))
 		{
@@ -408,6 +444,17 @@ void ATSSPlayerController::TSSPayDemo()
 void ATSSPlayerController::TSSStart()
 {
 	if (Menu) EnterGameInput();
+}
+
+void ATSSPlayerController::TSSPadLook(float Dist)
+{
+	ATSSRegister* Reg = nullptr;
+	for (TActorIterator<ATSSRegister> It(GetWorld()); It; ++It) { Reg = *It; break; }
+	if (!Reg) return;
+	const FVector Wp = Reg->GetActorTransform().TransformPosition(FVector(-30.f - Dist, 35.f, 0.f));
+	const FVector Wt = Reg->GetActorTransform().TransformPosition(FVector(-30.f, 35.f, 104.f));
+	const FRotator R = (Wt - (Wp + FVector(0.f, 0.f, 154.f))).Rotation();
+	ConsoleCommand(FString::Printf(TEXT("TSSLook %f %f 90 %f %f"), Wp.X, Wp.Y, R.Yaw, R.Pitch));
 }
 
 void ATSSPlayerController::TSSBox(int32 On)

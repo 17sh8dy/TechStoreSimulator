@@ -77,7 +77,7 @@ public:
 	ETSSPayMethod ForceMethod = ETSSPayMethod::None;
 
 	/** cm per second. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) float WalkSpeed = 140.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) float WalkSpeed = 205.f;
 	/** Seconds in line before they give up. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) float Patience = 45.f;
 
