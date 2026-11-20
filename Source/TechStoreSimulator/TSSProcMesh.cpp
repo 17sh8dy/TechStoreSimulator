@@ -243,6 +243,31 @@ void FTSSMeshBuilder::Loft(int32 Sec, const TArray<TArray<FVector>>& Rings, bool
 	if (bCapEnd) Cap(R - 1, (Centroid(R - 1) - Centroid(R - 2)).GetSafeNormal());
 }
 
+void FTSSMeshBuilder::MakeDoubleSided()
+{
+	for (FSection& S : Sections)
+	{
+		const int32 NV = S.V.Num(), NI = S.I.Num();
+		// Copies first: adding an element of an array to that same array is not allowed (it may reallocate under it).
+		const TArray<FVector> V = S.V, N = S.N;
+		const TArray<FVector2D> UV = S.UV;
+		const TArray<FLinearColor> C = S.C;
+		const TArray<int32> I = S.I;
+		S.V.Append(V);
+		S.UV.Append(UV);
+		S.C.Append(C);
+		S.N.Reserve(NV * 2);
+		for (const FVector& Nv : N) S.N.Add(-Nv);
+		S.I.Reserve(NI * 2);
+		for (int32 t = 0; t + 2 < NI; t += 3)
+		{
+			S.I.Add(I[t] + NV);
+			S.I.Add(I[t + 2] + NV);
+			S.I.Add(I[t + 1] + NV);
+		}
+	}
+}
+
 void FTSSMeshBuilder::Commit(UProceduralMeshComponent* Mesh, const TArray<UMaterialInterface*>& Materials, bool bCollision) const
 {
 	if (!Mesh) return;

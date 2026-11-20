@@ -44,6 +44,12 @@ public:
 	/** A flat disc / polygon fan around a centre, facing Normal. */
 	void Disc(int32 Sec, FVector Centre, FVector Normal, float Radius, int32 Segs = 16);
 
+	/**
+	 * Adds a back face to every triangle so far (reversed winding, flipped normal), so a shape stays solid from any side
+	 * even where a loft came out facing inwards. Doubles the triangle count: use it for small hero models (cars), not scenery.
+	 */
+	void MakeDoubleSided();
+
 	// ---- results ----
 	int32 NumVertices() const;
 	int32 NumTriangles() const;

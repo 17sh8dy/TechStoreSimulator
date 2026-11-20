@@ -46,6 +46,17 @@ public:
 	void InteractWith(ATSSInteractable* Target, const FHitResult& Hit);
 	UTSSMoverComponent* GetMover() const { return Mover; }
 
+	// ---- getting hit by a car ----
+	/** A moving car ran into you: you are thrown along PushDir (horizontal), fall over, lie there a moment and get back up. */
+	void HitByCar(const FVector& PushDir, float CarSpeed);
+	/** False while down, getting up, or just after (so one car does not hit you over and over). */
+	bool CanBeHitByCar() const { return KnockTime < 0.f && HitCooldown <= 0.f; }
+	bool IsKnockedDown() const { return KnockTime >= 0.f; }
+	/** Tests: skip the rest of the fall and stand up now. */
+	void RecoverNow();
+	/** How long a knock-down lasts, falling to standing (seconds). */
+	static constexpr float KnockDuration = 3.2f;
+
 	/** What the crosshair is on, as a HUD prompt ("" when nothing). */
 	const FString& GetFocusPrompt() const { return FocusPrompt; }
 
@@ -56,6 +67,9 @@ protected:
 private:
 	void ApplyView();
 	void UpdateFocus(class ATSSPlayerController* PC);
+	/** Poses the body / first-person camera for the knock-down; returns false once it is over. */
+	bool TickKnockDown(float DeltaSeconds);
+	void ApplyKnockPose(float FallAlpha, float Bounce);
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USpringArmComponent> SpringArm;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
@@ -77,5 +91,10 @@ bool bFirstPersonView = true;
 	FString FocusPrompt;
 
 	FDelegateHandle SettingsHandle;
-	float LookSensitivity = 0.12f;
+
+	/** Seconds into the current knock-down, or -1 when standing. */
+	float KnockTime = -1.f;
+	float HitCooldown = 0.f;
+	/** Which way the body falls, in the capsule's own frame (horizontal, unit). */
+	FVector KnockDirLocal = FVector::ForwardVector;
 };

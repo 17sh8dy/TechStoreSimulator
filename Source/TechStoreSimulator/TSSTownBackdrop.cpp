@@ -30,7 +30,7 @@ void ATSSTownBackdrop::Inst(UStaticMesh* Mesh, const FLinearColor& Color, const 
 	++Instances;
 }
 
-void ATSSTownBackdrop::Build(const ATSSRoad* Road)
+void ATSSTownBackdrop::Build(const ATSSRoad* Road, float KeepU, float KeepV)
 {
 	if (!Road) return;
 	static UStaticMesh* Cube = TSSCubeMesh();
@@ -48,19 +48,22 @@ void ATSSTownBackdrop::Build(const ATSSRoad* Road)
 	const float Half = Len * 0.5f;
 	const float RoadW = Road->RoadWidth, WalkW = Road->SidewalkWidth;
 	FRandomStream Rnd(4242);
+	const float From = FMath::Max(Half, KeepU);   // where the backdrop's street begins
+	auto InKeep = [&](float U, float V, float Pad) { return KeepU > 0.f && FMath::Abs(U) < KeepU + Pad && FMath::Abs(V) < KeepV + Pad; };
 
 	// Ground out to the horizon, just under the map's own ground so the join is invisible.
-	Inst(Cube, FLinearColor(0.16f, 0.2f, 0.17f), FVector(C.X, C.Y, -13.f), FRotator::ZeroRotator, FVector(90000.f, 90000.f, 20.f));
+	Inst(Cube, FLinearColor(0.16f, 0.2f, 0.17f), FVector(C.X, C.Y, -20.f), FRotator::ZeroRotator, FVector(90000.f, 90000.f, 20.f));   // top at -10, under the town's own ground
 
 	// The street carries on past both ends: asphalt, pavements, dashed centre line.
 	const float FarEnd = 12000.f;
 	for (float Dir : { -1.f, 1.f })
 	{
-		const float Mid = Dir * (Half + FarEnd * 0.5f);
-		Inst(Cube, FLinearColor(0.09f, 0.09f, 0.1f), W(Mid, 0.f, 1.f), Yaw, FVector(FarEnd, RoadW, 4.f));
+		const float Run = Half + FarEnd - From;
+		const float Mid = Dir * (From + Run * 0.5f);
+		Inst(Cube, FLinearColor(0.09f, 0.09f, 0.1f), W(Mid, 0.f, 1.f), Yaw, FVector(Run, RoadW, 4.f));
 		for (float S : { -1.f, 1.f })
-			Inst(Cube, FLinearColor(0.58f, 0.58f, 0.6f), W(Mid, S * (RoadW * 0.5f + WalkW * 0.5f), 6.f), Yaw, FVector(FarEnd, WalkW, 14.f));
-		for (float U = 200.f; U < FarEnd; U += 700.f)
+			Inst(Cube, FLinearColor(0.58f, 0.58f, 0.6f), W(Mid, S * (RoadW * 0.5f + WalkW * 0.5f), 6.f), Yaw, FVector(Run, WalkW, 14.f));
+		for (float U = From - Half + 200.f; U < FarEnd; U += 700.f)
 			Inst(Cube, FLinearColor(0.9f, 0.82f, 0.25f), W(Dir * (Half + U), 0.f, 2.4f), Yaw, FVector(300.f, 16.f, 0.4f));
 	}
 
@@ -84,7 +87,7 @@ void ATSSTownBackdrop::Build(const ATSSRoad* Road)
 	for (float Dir : { -1.f, 1.f })
 		for (float S : { -1.f, 1.f })
 		{
-			float U = Half + 40.f;
+			float U = From + 40.f;
 			while (U < Half + FarEnd)
 			{
 				const float Wd = Rnd.FRandRange(620.f, 900.f), Dp = Rnd.FRandRange(600.f, 900.f);
@@ -103,6 +106,7 @@ void ATSSTownBackdrop::Build(const ATSSRoad* Road)
 		const float U = FMath::Cos(Ang) * Rad, V = FMath::Sin(Ang) * Rad;
 		const float Wd = Rnd.FRandRange(700.f, 1300.f), Dp = Rnd.FRandRange(700.f, 1300.f);
 		if (FMath::Abs(U) < NearU + Wd * 0.5f && FMath::Abs(V) < 3300.f) continue;               // around the real street and shop
+		if (InKeep(U, V, 400.f + FMath::Max(Wd, Dp) * 0.5f)) continue;                            // the walkable town
 		if (FMath::Abs(U) > Half && FMath::Abs(V) < RoadW * 0.5f + WalkW + 1400.f) continue;     // beside the carried-on street
 		bool bHit = false;
 		const FBox2D Mine(FVector2D(U - Wd * 0.5f, V - Dp * 0.5f), FVector2D(U + Wd * 0.5f, V + Dp * 0.5f));
@@ -141,9 +145,9 @@ void ATSSTownBackdrop::Build(const ATSSRoad* Road)
 	};
 	for (float Dir : { -1.f, 1.f })
 		for (float S : { -1.f, 1.f })
-			for (float U = 300.f; U < FarEnd * 0.75f; U += 1300.f)
+			for (float U = From - Half + 300.f; U < FarEnd * 0.75f; U += 1300.f)
 			{
-				if (U < 4200.f) NearTree(W(Dir * (Half + U), S * (RoadW * 0.5f + 70.f), 12.f));
+				if (U < From - Half + 4200.f) NearTree(W(Dir * (Half + U), S * (RoadW * 0.5f + 70.f), 12.f));
 				else Tree(W(Dir * (Half + U), S * (RoadW * 0.5f + 70.f), 12.f), 1.f);
 			}
 	for (int32 I = 0, Placed = 0; I < 600 && Placed < 90; ++I)
@@ -151,6 +155,7 @@ void ATSSTownBackdrop::Build(const ATSSRoad* Road)
 		const float Ang = Rnd.FRand() * 2.f * PI, Rad = FMath::Lerp(3300.f, 14000.f, Rnd.FRand());
 		const float U = FMath::Cos(Ang) * Rad, V = FMath::Sin(Ang) * Rad;
 		if (FMath::Abs(U) < Half + 300.f && FMath::Abs(V) < 3300.f) continue;
+		if (InKeep(U, V, 300.f)) continue;
 		if (FMath::Abs(U) > Half - 200.f && FMath::Abs(V) < RoadW * 0.5f + WalkW + 40.f) continue;
 		bool bHit = false;
 		for (const FBox2D& B : Footprints) if (B.IsInside(FVector2D(U, V))) { bHit = true; break; }

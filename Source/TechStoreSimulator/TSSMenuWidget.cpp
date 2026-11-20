@@ -234,6 +234,62 @@ TSharedRef<SWidget> UTSSMenuWidget::FovRow(const FString& Text, ETSSViewMode Mod
 		];
 }
 
+TSharedRef<SWidget> UTSSMenuWidget::SensitivityRow(const FString& Text, bool bVertical)
+{
+	constexpr float Steps = float(TSSMaxSensitivity - TSSMinSensitivity);
+	return SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SBox).WidthOverride(210.f)[ MenuLabel(Text, 15, true) ]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SBox).WidthOverride(300.f)
+			[
+				SNew(SSlider)
+				.Value(TAttribute<float>::CreateLambda([this, bVertical, Steps]()
+				{
+					const UTSSSettingsSubsystem* S = GetSettings();
+					return S ? float(S->GetSensitivity(bVertical) - TSSMinSensitivity) / Steps : 0.5f;
+				}))
+				.StepSize(1.f / Steps)
+				.MouseUsesStep(true)
+				.OnValueChanged(FOnFloatValueChanged::CreateLambda([this, bVertical, Steps](float V)
+				{
+					if (UTSSSettingsSubsystem* S = GetSettings())
+					{
+						S->SetSensitivity(bVertical, TSSMinSensitivity + FMath::RoundToInt(V * Steps));
+					}
+				}))
+			]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16, 0, 0, 0)
+		[
+			SNew(SBox).WidthOverride(60.f)
+			[
+				SNew(STextBlock)
+				.Text(TAttribute<FText>::CreateLambda([this, bVertical]()
+				{
+					const UTSSSettingsSubsystem* S = GetSettings();
+					return FText::AsNumber(S ? S->GetSensitivity(bVertical) : TSSDefaultSensitivity);
+				}))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 15))
+			]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			SNew(SButton)
+			.OnClicked(FOnClicked::CreateLambda([this, bVertical]()
+			{
+				if (UTSSSettingsSubsystem* S = GetSettings()) S->SetSensitivity(bVertical, TSSDefaultSensitivity);
+				return FReply::Handled();
+			}))
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("Reset (5)"))).Font(FCoreStyle::GetDefaultFontStyle("Regular", 13))
+			]
+		];
+}
+
 TSharedRef<SWidget> UTSSMenuWidget::SprintRow()
 {
 	return SNew(SHorizontalBox)
@@ -329,6 +385,8 @@ TSharedRef<SWidget> UTSSMenuWidget::BuildSettings()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)[ FovRow(TEXT("Third Person FOV"), ETSSViewMode::ThirdPerson) ]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 24, 0, 10)[ MenuLabel(TEXT("CONTROLS"), 18, true, MenuAccent) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)[ SprintRow() ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)[ SensitivityRow(TEXT("Look sensitivity X"), false) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 6)[ SensitivityRow(TEXT("Look sensitivity Y"), true) ]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 24, 0, 10)[ MenuLabel(TEXT("SAVED GAME"), 18, true, MenuAccent) ]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0, 6)
 		[

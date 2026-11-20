@@ -32,6 +32,8 @@
 #include "TSSRegisterDevice.h"
 #include "TSSCheckoutTypes.h"
 #include "TSSProductItem.h"
+#include "TSSTownDistrict.h"
+#include "Components/BoxComponent.h"
 
 void ATSSPlayerController::BeginPlay()
 {
@@ -71,6 +73,40 @@ void ATSSPlayerController::BeginPlay()
 					At(T, TEXT("Shot ShowUI")); T += 1.1f;
 				}
 				At(T + 0.5f, TEXT("quit"));
+			}, 1.5f, false);
+		}
+
+		// `-TSSDistrictShots`: walks round the town blocks, gets hit by a car (third then first person), shows Settings, then quits.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TSSDistrictShots")))
+		{
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, [this]()
+			{
+				TSSStart();
+				auto At = [this](float Delay, FString Cmd)
+				{
+					FTimerHandle T;
+					GetWorldTimerManager().SetTimer(T, [this, Cmd]() { ConsoleCommand(Cmd); }, Delay, false);
+				};
+				float T = 0.3f;
+				const TCHAR* Views[] = {
+					TEXT("TSSLook 1100 3200 100 90 -3"),      // main street, on past the old road end, to the cross street
+					TEXT("TSSLook -1150 -1000 100 160 -4"),   // the park behind the shop
+					TEXT("TSSLook 6200 -2600 100 90 -3"),     // back street across the road
+					TEXT("TSSLook 6000 300 160 195 -10"),     // the car park, from the back street
+					TEXT("TSSLook 300 4000 100 195 -4"),      // cross street with parked cars
+					TEXT("TSSLook 1300 7350 100 90 -3"),      // at the town wall, looking out
+					TEXT("TSSLook 2300 -5000 100 -90 -2") };  // main street back towards the shop
+				for (const TCHAR* V : Views) { At(T, V); T += 1.4f; At(T, TEXT("Shot ShowUI")); T += 0.8f; }
+				for (int32 Third = 1; Third >= 0; --Third)
+				{
+					At(T, FString::Printf(TEXT("TSSHitDemo %d"), Third));
+					for (const float Dt : { 1.0f, 1.55f, 1.9f, 2.6f, 4.1f }) At(T + Dt, TEXT("Shot ShowUI"));
+					T += 6.f;
+				}
+				At(T, TEXT("TSSSettingsPage")); T += 0.8f;
+				At(T, TEXT("Shot ShowUI")); T += 1.f;
+				At(T, TEXT("quit"));
 			}, 1.5f, false);
 		}
 
@@ -894,12 +930,106 @@ Check(TEXT("sprinting is clearly faster than walking"), ATSSCharacter::SpeedFor(
 		Check(TEXT("customers always hand over enough, and never a silly overpayment"), bTenderOk);
 	}
 
+	// ---- mouse sensitivity (Settings > Controls) ----
+	if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>())
+	{
+		const int32 X0 = Cfg->GetSensitivity(false), Y0 = Cfg->GetSensitivity(true);
+		Check(TEXT("look sensitivity defaults to 5 on a 1-10 scale, 5 = the old fixed speed"),
+			UTSSSettingsSubsystem::LookScaleFor(TSSDefaultSensitivity) == 0.12f && X0 >= TSSMinSensitivity && X0 <= TSSMaxSensitivity && Y0 >= TSSMinSensitivity && Y0 <= TSSMaxSensitivity);
+		Cfg->SetSensitivity(false, 10, false);
+		Cfg->SetSensitivity(true, 1, false);
+		Check(TEXT("X and Y sensitivity are separate: 10 turns faster and 1 slower than 5"),
+			Cfg->GetLookScale(false) > 0.3f && Cfg->GetLookScale(true) < 0.06f && Cfg->GetSensitivity(false) == 10 && Cfg->GetSensitivity(true) == 1);
+		Cfg->SetSensitivity(false, 42, false);
+		Check(TEXT("sensitivity is clamped to 1-10"), Cfg->GetSensitivity(false) == TSSMaxSensitivity);
+		Cfg->SetSensitivity(false, X0, false);
+		Cfg->SetSensitivity(true, Y0, false);
+	}
+
+	// ---- the town: walls round it, and cars knock you over ----
+	if (UTSSTownSubsystem* Town = GetWorld()->GetSubsystem<UTSSTownSubsystem>())
+	{
+		ATSSRoad* Road = ATSSRoad::Find(GetWorld());
+		if (ATSSTownDistrict* District = Town->GetDistrict())
+		{
+			Check(TEXT("the town district has streets of buildings and parked cars"), District->NumBuildings() >= 20 && District->NumParkedCars() >= 8);
+			Check(TEXT("the shop and the whole real road are inside the town walls"),
+				District->IsInside(FVector(0.f, 0.f, 100.f)) && (!Road || (District->IsInside(Road->PointAt(0.f, 0.f)) && District->IsInside(Road->PointAt(Road->GetLength(), 0.f)))));
+			bool bWalls = District->GetWalls().Num() == 4;
+			for (const UBoxComponent* Wall : District->GetWalls())
+				bWalls &= Wall && Wall->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block && Wall->GetScaledBoxExtent().Z > 300.f;
+			Check(TEXT("four invisible walls that block the player stand round the town"), bWalls);
+			// Walk at a wall: the floor holds you up and the wall stops you.
+			if (Road)
+			{
+				const FVector Saved = Me->GetActorLocation();
+				const FVector Edge = Road->PointAt(Road->GetLength() * 0.5f, -ATSSTownDistrict::HalfV + 300.f) + FVector(0.f, 0.f, 100.f);
+				const FVector Beyond = Road->PointAt(Road->GetLength() * 0.5f, -ATSSTownDistrict::HalfV - 600.f) + FVector(0.f, 0.f, 100.f);
+				Me->SetActorLocation(Edge);
+				FHitResult WallHit;
+				Me->SetActorLocation(Beyond, true, &WallHit);
+				Check(TEXT("walking at the town's edge is stopped by the wall"), WallHit.bBlockingHit && District->IsInside(Me->GetActorLocation()));
+				FHitResult Down;
+				FCollisionQueryParams Q(SCENE_QUERY_STAT(TSSFloorTest), false, Me);
+				const bool bFloor = GetWorld()->LineTraceSingleByChannel(Down, Edge, Edge - FVector(0.f, 0.f, 600.f), ECC_Pawn, Q);
+				Check(TEXT("there is solid ground right up to the wall"), bFloor && FMath::Abs(Down.ImpactPoint.Z) < 20.f);
+				Me->SetActorLocation(Saved);
+			}
+		}
+		if (Road)
+		{
+			const FVector Saved = Me->GetActorLocation();
+			const float D = Road->GetCrosswalkDistance() + 1500.f;
+			ATSSTrafficCar* Car = Town->SpawnCar(ETSSCarType::Sedan, true, D, 900.f, FLinearColor(0.55f, 0.03f, 0.03f));
+			if (Car)
+			{
+				Check(TEXT("a car well away from the player does not hit them"), !Car->TryHitPlayer() && !Me->IsKnockedDown());
+				Me->SetActorLocation(Car->GetActorLocation() + Car->GetActorForwardVector() * (Car->GetLength() * 0.5f + 10.f) + FVector(0.f, 0.f, 92.f));
+				const bool bHit = Car->TryHitPlayer();
+				Check(TEXT("a moving car that reaches the player knocks them down, and its driver stops"), bHit && Me->IsKnockedDown() && Car->IsHaltedAfterHit());
+				Check(TEXT("while down the player cannot be hit again"), !Me->CanBeHitByCar() && !Car->TryHitPlayer());
+				Me->RecoverNow();
+				Check(TEXT("the player gets back up"), !Me->IsKnockedDown() && Me->CanBeHitByCar());
+				Car->Destroy();
+			}
+			ATSSTrafficCar* Parked = Town->SpawnCar(ETSSCarType::Hatchback, true, D, 0.f, FLinearColor(0.03f, 0.1f, 0.35f));
+			if (Parked)
+			{
+				Me->SetActorLocation(Parked->GetActorLocation() + FVector(0.f, 0.f, 92.f));
+				Check(TEXT("a stopped car does not knock anyone over"), !Parked->TryHitPlayer() && !Me->IsKnockedDown());
+				Parked->Destroy();
+			}
+			Me->SetActorLocation(Saved);
+		}
+	}
+
 	UE_LOG(LogTemp, Display, TEXT("TSSTEST DONE fails=%d"), Fails);
 }
 
 void ATSSPlayerController::TSSTime(float Hour)
 {
 	if (UTSSBusinessSubsystem* Biz = GetWorld()->GetSubsystem<UTSSBusinessSubsystem>()) Biz->SetHour(Hour);
+}
+
+void ATSSPlayerController::TSSHitDemo(int32 ThirdPerson)
+{
+	UTSSTownSubsystem* Town = GetWorld()->GetSubsystem<UTSSTownSubsystem>();
+	ATSSRoad* Road = ATSSRoad::Find(GetWorld());
+	ATSSCharacter* Me = Cast<ATSSCharacter>(GetPawn());
+	if (!Town || !Road || !Me) return;
+	if (UTSSSettingsSubsystem* Cfg = GetGameInstance()->GetSubsystem<UTSSSettingsSubsystem>())
+		Cfg->SetViewMode(ThirdPerson ? ETSSViewMode::ThirdPerson : ETSSViewMode::FirstPerson, false);
+	Me->RecoverNow();
+	Town->SetTrafficEnabled(false);
+	Town->ClearTraffic();
+	// Stand in the near lane looking across the road; a car comes from the left.
+	const float D = Road->GetCrosswalkDistance() + 1600.f;
+	const FVector Spot = Road->PointAt(D, Road->GetLaneOffset()) + FVector(0.f, 0.f, 92.f);
+	Me->SetActorLocation(Spot);
+	const FRotator Face = (Road->PointAt(D - 900.f, -Road->GetLaneOffset()) - Spot).Rotation();
+	SetControlRotation(FRotator(-5.f, Face.Yaw, 0.f));
+	Me->SetActorRotation(FRotator(0.f, Face.Yaw, 0.f));
+	Town->SpawnCar(ETSSCarType::Sedan, true, D - 1350.f, 950.f, FLinearColor(0.55f, 0.03f, 0.03f));
 }
 
 void ATSSPlayerController::TSSSettingsPage()

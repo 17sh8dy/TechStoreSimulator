@@ -22,8 +22,11 @@ class ATSSTownBackdrop : public AActor
 public:
 	ATSSTownBackdrop();
 
-	/** Builds everything around the given road. */
-	void Build(const ATSSRoad* Road);
+	/**
+	 * Builds everything around the given road. KeepU/KeepV (half sizes from the road's middle, in its frame) is a rectangle
+	 * left empty for the walkable town (ATSSTownDistrict); the carried-on street starts at its edge. 0 = just the road.
+	 */
+	void Build(const ATSSRoad* Road, float KeepU = 0.f, float KeepV = 0.f);
 	int32 NumInstances() const { return Instances; }
 
 private:

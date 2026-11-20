@@ -23,7 +23,8 @@ Visual reference: Supermarket Simulator / Waterpark Simulator streets (brick mid
 3. [x] T3 (2026-11-08, TSSTownBackdrop.*): ground to the horizon, street carried on past both ends, lining blocks, skyline, trees; spawned by the town subsystem (`-TSSNoBackdrop` skips). Distant blocks have no lit windows at night yet.
 4. [x] Outdoor lighting: ATSSDayNight now drives sky-light fill (SkyDayIntensity 1.3 / SkyNightIntensity 0.15, editable on the actor). Interior at night still looks blown-out white (was already so; separate shop-interior lighting pass).
 5. [x] Verified 2026-11-08: build OK, `-TSSAutoTest` 0 fails (222 checks), `-TSSStreetShots` shots looked at. NOT measured: frame rate on the RX 7800 XT (check with `stat fps` in a normal run). Nothing committed.
-6. [ ] Later, only if the town grows: PCG scatter, World Partition, HLOD. Ideas left: lit windows on backdrop, litter, tree look (still blobs), per-shop sign materials that glow at night.
+6. [x] T4a (2026-11-20, TSSTownDistrict.*): the walkable town round the shop - main street carried on to +-76 m, a cross street at each end, a back street behind each row (the shop sits in a ring of streets), 30 buildings, a park behind the shop, a car park, 13 parked cars, invisible floor + walls so nobody falls off the map. Traffic now drives the whole main street (the road extrapolates past its spline ends). Cars are double-sided (they were see-through from some angles) and knock the player down. Not done: lamps on the new streets, traffic on the side streets, the delivery truck still appears at the road's end.
+7. [ ] Later, only if the town grows: PCG scatter, World Partition, HLOD. Ideas left: lit windows on backdrop, litter, tree look (still blobs), per-shop sign materials that glow at night.
 
 ## After the town
 - Customers who walk in, pick items and pay at the register (the counter and register are placeholders).

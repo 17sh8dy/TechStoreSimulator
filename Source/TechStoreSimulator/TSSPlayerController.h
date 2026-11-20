@@ -39,6 +39,8 @@ public:
 	UFUNCTION(Exec) void TSSCustomer();
 	/** Developer: sends an empty delivery truck down the road to the shop (no order, nothing delivered). */
 	UFUNCTION(Exec) void TSSTruck();
+	/** Developer: stands you in the road and sends a car into you (1 = third person view, 0 = first person; not saved). */
+	UFUNCTION(Exec) void TSSHitDemo(int32 ThirdPerson);
 	/** Developer: opens the Settings page (for screenshots). */
 	UFUNCTION(Exec) void TSSSettingsPage();
 	/** Developer: sets the in-game clock to this hour of the day, e.g. `TSSTime 21.5` for 9:30 PM. */

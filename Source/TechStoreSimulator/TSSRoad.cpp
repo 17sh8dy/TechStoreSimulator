@@ -44,8 +44,11 @@ void ATSSRoad::GetBinTransforms(TArray<FTransform>& Out) const
 
 FVector ATSSRoad::PointAt(float Distance, float Offset) const
 {
-	const FVector P = Spline->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
-	const FVector T = Spline->GetDirectionAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World).GetSafeNormal2D();
+	// Past either end the road carries on straight (traffic drives on through the town and the backdrop).
+	const float Len = Spline->GetSplineLength();
+	const float D = FMath::Clamp(Distance, 0.f, Len);
+	const FVector T = Spline->GetDirectionAtDistanceAlongSpline(D, ESplineCoordinateSpace::World).GetSafeNormal2D();
+	const FVector P = Spline->GetLocationAtDistanceAlongSpline(D, ESplineCoordinateSpace::World) + T * (Distance - D);
 	return P + FVector::CrossProduct(FVector::UpVector, T) * Offset;
 }
 

@@ -43,6 +43,7 @@ private:
 	TSharedRef<SWidget> ViewCard(ETSSViewMode Mode, const FString& Title, const FString& Body, bool bPendingChoice);
 	TSharedRef<SWidget> FovRow(const FString& Label, ETSSViewMode Mode);
 	TSharedRef<SWidget> SprintRow();
+	TSharedRef<SWidget> SensitivityRow(const FString& Label, bool bVertical);
 
 	UTSSSettingsSubsystem* GetSettings() const;
 

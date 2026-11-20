@@ -156,6 +156,91 @@ void ATSSCharacter::InteractWith(ATSSInteractable* Target, const FHitResult& Hit
 	GestureTimer = 0.55f;
 }
 
+void ATSSCharacter::HitByCar(const FVector& PushDir, float CarSpeed)
+{
+	if (!CanBeHitByCar()) return;
+	FVector Dir = PushDir.GetSafeNormal2D();
+	if (Dir.IsNearlyZero()) Dir = -GetActorForwardVector();
+	KnockTime = 0.f;
+	KnockDirLocal = GetActorTransform().InverseTransformVectorNoScale(Dir).GetSafeNormal2D();
+	if (KnockDirLocal.IsNearlyZero()) KnockDirLocal = -FVector::ForwardVector;
+	// Thrown clear of the car: harder the faster it was going, with a little hop.
+	const float Throw = FMath::Clamp(CarSpeed * 0.75f, 350.f, 900.f);
+	LaunchCharacter(Dir * Throw + FVector(0.f, 0.f, 260.f), true, true);
+	GetCharacterMovement()->bOrientRotationToMovement = false;   // keep facing the same way while sliding
+	Human->SetSpeed(0.f);
+	Human->Relax(ETSSHand::Right, 0.1f);
+	Human->StopLooking();
+	GestureTimer = 0.f;
+	// Whatever is in the hands is not drawn while you are on the ground (it comes back when you stand up).
+	HeldMesh->SetVisibility(false, true);
+	EmptyBoxMesh->SetVisibility(false, true);
+	UE_LOG(LogTemp, Display, TEXT("TSS player hit by a car at %.0f cm/s"), CarSpeed);
+}
+
+void ATSSCharacter::RecoverNow()
+{
+	if (KnockTime < 0.f) return;
+	KnockTime = KnockDuration;
+	TickKnockDown(0.f);
+	HitCooldown = 0.f;
+}
+
+void ATSSCharacter::ApplyKnockPose(float A, float Bounce)
+{
+	// The body tips over about the feet, away from the car, and ends up lying flat (lifted so it rests on the ground).
+	const FQuat Base = FRotator(0.f, -90.f, 0.f).Quaternion();
+	const FVector Axis = FVector::CrossProduct(FVector::UpVector, KnockDirLocal).GetSafeNormal();
+	const float Angle = FMath::DegreesToRadians(86.f * A - 6.f * Bounce);
+	Human->SetRelativeRotation(FQuat(Axis, Angle) * Base);
+	Human->SetRelativeLocation(FVector(0.f, 0.f, -88.f + 14.f * A));
+
+	// First person: the view drops to the pavement and tilts the way you fall.
+	if (bFirstPersonView)
+	{
+		SpringArm->SetRelativeLocation(FVector(0.f, 0.f, FMath::Lerp(64.f, -62.f, A)));
+		const float Pitch = -KnockDirLocal.X * 55.f * A + 8.f * Bounce;
+		const float Roll = KnockDirLocal.Y * 50.f * A;
+		Camera->SetRelativeRotation(FRotator(Pitch, 0.f, Roll));
+	}
+	else
+	{
+		SpringArm->SetRelativeLocation(FVector(0.f, 0.f, 64.f));
+		Camera->SetRelativeRotation(FRotator(0.f, 0.f, 3.f * Bounce));
+	}
+}
+
+bool ATSSCharacter::TickKnockDown(float Dt)
+{
+	KnockTime += Dt;
+	const float T = KnockTime;
+	const float FallEnd = 0.45f, GetUp = KnockDuration - 1.1f;
+	if (T >= KnockDuration)
+	{
+		KnockTime = -1.f;
+		HitCooldown = 1.5f;
+		ApplyKnockPose(0.f, 0.f);
+		Human->SetRelativeRotation(FRotator(0.f, -90.f, 0.f));
+		Human->SetRelativeLocation(FVector(0.f, 0.f, -88.f));
+		Camera->SetRelativeRotation(FRotator::ZeroRotator);
+		ApplyView();               // orient-to-movement back for third person
+		SetHeld(Held);             // the hands' contents show again
+		SetCarryingEmptyBox(bEmptyBox);
+		return false;
+	}
+	float A, Bounce = 0.f;
+	if (T < FallEnd) A = FMath::Pow(T / FallEnd, 2.f);                                       // falls faster and faster
+	else if (T < GetUp)
+	{
+		A = 1.f;
+		const float B = (T - FallEnd) / 0.35f;                                                // one small bounce on landing
+		if (B < 1.f) Bounce = FMath::Sin(B * PI) * (1.f - B);
+	}
+	else A = 1.f - FMath::SmoothStep(0.f, 1.f, (T - GetUp) / (KnockDuration - GetUp));       // gets back up
+	ApplyKnockPose(A, Bounce);
+	return true;
+}
+
 void ATSSCharacter::UpdateFocus(ATSSPlayerController* PC)
 {
 	Focus = nullptr;
@@ -184,6 +269,16 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 		return;
 	}
 	ActiveFor += DeltaSeconds;
+	if (HitCooldown > 0.f) HitCooldown -= DeltaSeconds;
+
+	// Hit by a car: no control until you are back on your feet.
+	if (KnockTime >= 0.f && TickKnockDown(DeltaSeconds))
+	{
+		Focus = nullptr;
+		FocusPrompt = TEXT("Ouch! You were hit by a car. Watch the traffic!");
+		Human->SetSpeed(0.f);
+		return;
+	}
 
 	FKey SprintKey = EKeys::LeftShift;
 	if (const UGameInstance* GI = GetGameInstance())
@@ -212,8 +307,17 @@ void ATSSCharacter::Tick(float DeltaSeconds)
 
 	float MouseX = 0.f, MouseY = 0.f;
 	PC->GetInputMouseDelta(MouseX, MouseY);
-	AddControllerYawInput(MouseX * LookSensitivity);
-	AddControllerPitchInput(-MouseY * LookSensitivity);
+	float LookX = UTSSSettingsSubsystem::LookScaleFor(TSSDefaultSensitivity), LookY = LookX;
+	if (const UGameInstance* GI = GetGameInstance())
+	{
+		if (const UTSSSettingsSubsystem* Cfg = GI->GetSubsystem<UTSSSettingsSubsystem>())
+		{
+			LookX = Cfg->GetLookScale(false);
+			LookY = Cfg->GetLookScale(true);
+		}
+	}
+	AddControllerYawInput(MouseX * LookX);
+	AddControllerPitchInput(-MouseY * LookY);
 
 	const FRotator Yaw(0.f, PC->GetControlRotation().Yaw, 0.f);
 	const FVector Forward = FRotationMatrix(Yaw).GetUnitAxis(EAxis::X);

@@ -7,6 +7,7 @@
 
 class ATSSRoad;
 class ATSSPasserby;
+class ATSSTownDistrict;
 
 /**
  * Everything that makes the street outside feel lived in, spawned from code at the start of play so the saved map is
@@ -43,6 +44,10 @@ public:
 	/** Set by whatever is crossing the road, so cars wait for it. */
 	void SetCrosswalkBusy(bool bBusy) { bCrosswalkBusy = bBusy; }
 	bool IsCrosswalkBusy() const { return bCrosswalkBusy; }
+	/** How far past each end of the road (cm) traffic starts and ends, so cars cross the whole town. */
+	float TrafficOverrun() const;
+	/** The walkable blocks round the shop (null with -TSSNoDistrict). */
+	ATSSTownDistrict* GetDistrict() const { return District.Get(); }
 
 private:
 	void TickTraffic(float Dt);
@@ -50,6 +55,7 @@ private:
 	void RefreshNight();
 
 	TWeakObjectPtr<ATSSRoad> Road;
+	TWeakObjectPtr<ATSSTownDistrict> District;
 	TArray<TWeakObjectPtr<ATSSTrafficCar>> Cars;
 	float NextSpawn[2] = { 2.f, 6.f };   // seconds until the next car in each direction
 	float NightCheck = 0.f;

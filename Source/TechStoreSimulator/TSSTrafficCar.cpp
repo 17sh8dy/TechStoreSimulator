@@ -3,6 +3,8 @@
 #include "TSSRoad.h"
 #include "TSSTown.h"
 #include "TSSStoreSubsystem.h"
+#include "TSSCharacter.h"
+#include "Kismet/GameplayStatics.h"
 #include "ProceduralMeshComponent.h"
 #include "Components/SpotLightComponent.h"
 
@@ -54,7 +56,7 @@ namespace
 		}
 	}
 
-	const FLinearColor GlassColor(0.012f, 0.022f, 0.03f);
+	const FLinearColor GlassColor(0.045f, 0.06f, 0.075f);   // smoked glass: dark but clearly a surface, not a hole
 	const FLinearColor TrimColor(0.012f, 0.012f, 0.014f);
 	const FLinearColor ChromeColor(0.62f, 0.64f, 0.67f);
 	const FLinearColor TyreColor(0.006f, 0.006f, 0.007f);
@@ -115,6 +117,7 @@ void ATSSTrafficCar::BuildWheel(UProceduralMeshComponent* Wheel, float R, float 
 		B.Beam(3, D * (R * 0.14f) + FVector(0, 0, H * 0.78f), D * (R * 0.60f) + FVector(0, 0, H * 0.78f), R * 0.11f, R * 0.14f, H * 0.18f, H * 0.18f, FVector(0, 0, 1));
 	}
 	B.Pop();
+	B.MakeDoubleSided();
 	B.Commit(Wheel, { TSSTown::Paint(TyreColor), TSSTown::Paint(FLinearColor(0.2f, 0.21f, 0.23f)), TSSTown::Paint(ChromeColor), TSSTown::Paint(FLinearColor(0.34f, 0.35f, 0.37f)) });
 	Triangles += B.NumTriangles();
 }
@@ -245,9 +248,10 @@ void ATSSTrafficCar::Build(ETSSCarType InType, const FLinearColor& Paint)
 		B.Box(0, FVector(XAt(0.93f), 0.f, S.Trunk + 2.f), FVector(8.f, HW * 0.6f, 1.2f));   // a boot lid spoiler lip
 	}
 
-TArray<UMaterialInterface*> Mats = {
+	TArray<UMaterialInterface*> Mats = {
 		TSSTown::Paint(Paint), TSSTown::Paint(GlassColor), TSSTown::Paint(TrimColor), TSSTown::Paint(ChromeColor),
 		TSSTown::Paint(FLinearColor(0.7f, 0.72f, 0.74f)), TSSTown::Paint(FLinearColor(0.35f, 0.02f, 0.02f)) };
+	B.MakeDoubleSided();   // the body is never see-through, whichever way a loft faces
 	B.Commit(Body, Mats);
 	Triangles += B.NumTriangles();
 
@@ -294,6 +298,24 @@ void ATSSTrafficCar::UpdatePose(float Dt)
 	SetActorLocationAndRotation(P, R);
 }
 
+bool ATSSTrafficCar::TryHitPlayer()
+{
+	if (Speed < 150.f) return false;   // creeping in a queue: no harm done
+	ATSSCharacter* Me = Cast<ATSSCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0));
+	if (!Me || !Me->CanBeHitByCar()) return false;
+	// The player's capsule (radius 34, half height 88) against the car's box, in the car's frame.
+	const FVector L = GetActorTransform().InverseTransformPosition(Me->GetActorLocation());
+	const float R = 30.f;
+	if (FMath::Abs(L.X) > Length * 0.5f + R || FMath::Abs(L.Y) > Width * 0.5f + R) return false;
+	if (L.Z < -60.f || L.Z > Height + 88.f) return false;
+	// Thrown forward and off to whichever side of the bonnet you were on.
+	const float Side = FMath::Clamp(L.Y / (Width * 0.5f), -1.f, 1.f);
+	const FVector Dir = (GetActorForwardVector() + GetActorRightVector() * (Side >= 0.f ? 1.f : -1.f) * (0.35f + 0.5f * FMath::Abs(Side))).GetSafeNormal2D();
+	Me->HitByCar(Dir, Speed);
+	HitHalt = 2.5f;   // the driver brakes hard and waits a moment
+	return true;
+}
+
 void ATSSTrafficCar::Tick(float Dt)
 {
 	Super::Tick(Dt);
@@ -303,7 +325,8 @@ void ATSSTrafficCar::Tick(float Dt)
 
 	UTSSTownSubsystem* Town = GetWorld()->GetSubsystem<UTSSTownSubsystem>();
 	const float Allowed = Town ? Town->AllowedSpeed(*this) : Cruise;
-	const float Target = FMath::Min(Cruise, Allowed);
+	if (HitHalt > 0.f) HitHalt -= Dt;
+	const float Target = HitHalt > 0.f ? 0.f : FMath::Min(Cruise, Allowed);
 	const bool bSlowing = Target < Speed - 8.f;
 	Speed = FMath::FInterpConstantTo(Speed, Target, Dt, bSlowing ? 1100.f : 320.f);
 	if (bSlowing != bBraking)
@@ -313,10 +336,12 @@ void ATSSTrafficCar::Tick(float Dt)
 	}
 	Distance += (bForward ? 1.f : -1.f) * Speed * Dt;
 	UpdatePose(Dt);
+	TryHitPlayer();
 
 	WheelSpin += Speed * Dt / WheelRadius;
 	for (UProceduralMeshComponent* W : Wheels) if (W) W->SetRelativeRotation(FRotator(-FMath::RadiansToDegrees(WheelSpin), 0.f, 0.f));
 
 	const float Len = Road->GetLength();
-	if (Distance < -600.f || Distance > Len + 600.f) Destroy();
+	const float Over = (Town ? Town->TrafficOverrun() : 450.f) + 150.f;
+	if (Distance < -Over || Distance > Len + Over) Destroy();
 }

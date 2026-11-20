@@ -46,6 +46,14 @@ public:
 	/** A stopped car (waiting at the crosswalk, in a queue). */
 	bool IsStopped() const { return Speed < 5.f; }
 
+	/**
+	 * If the car is moving and the player is in its way, knocks them over (and the driver stops for a moment).
+	 * Called every tick; public for tests. Returns true if it hit.
+	 */
+	bool TryHitPlayer();
+	/** The driver stopped after hitting someone. */
+	bool IsHaltedAfterHit() const { return HitHalt > 0.f; }
+
 	/** Where this type of car's wheels sit, for the model and for tests. */
 	static void Dimensions(ETSSCarType Type, float& L, float& W, float& H);
 
@@ -71,5 +79,6 @@ private:
 	float WheelSpin = 0.f;
 	bool bNightNow = false;
 	bool bBraking = false;
+	float HitHalt = 0.f;
 	bool bBuilt = false;
 };

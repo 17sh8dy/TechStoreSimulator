@@ -11,6 +11,32 @@ void UTSSSettingsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	Data->FirstPersonFOV = FMath::Clamp(Data->FirstPersonFOV, TSSMinFOV, TSSMaxFOV);
 	Data->ThirdPersonFOV = FMath::Clamp(Data->ThirdPersonFOV, TSSMinFOV, TSSMaxFOV);
+	// Saves from before the setting existed load as 0: treat that as the default.
+	if (Data->SensitivityX < TSSMinSensitivity) Data->SensitivityX = TSSDefaultSensitivity;
+	if (Data->SensitivityY < TSSMinSensitivity) Data->SensitivityY = TSSDefaultSensitivity;
+	Data->SensitivityX = FMath::Clamp(Data->SensitivityX, TSSMinSensitivity, TSSMaxSensitivity);
+	Data->SensitivityY = FMath::Clamp(Data->SensitivityY, TSSMinSensitivity, TSSMaxSensitivity);
+}
+
+void UTSSSettingsSubsystem::SetSensitivity(bool bVertical, int32 Value, bool bPersist)
+{
+	Value = FMath::Clamp(Value, TSSMinSensitivity, TSSMaxSensitivity);
+	int32& Slot = bVertical ? Data->SensitivityY : Data->SensitivityX;
+	if (Slot == Value) return;
+	Slot = Value;
+	if (bPersist) Save();
+	OnChanged.Broadcast();
+}
+
+float UTSSSettingsSubsystem::LookScaleFor(int32 Value)
+{
+	// Geometric steps feel even: 1 is about a third of the default, 10 about three times it.
+	return 0.12f * FMath::Pow(1.25f, float(FMath::Clamp(Value, TSSMinSensitivity, TSSMaxSensitivity) - TSSDefaultSensitivity));
+}
+
+float UTSSSettingsSubsystem::GetLookScale(bool bVertical) const
+{
+	return LookScaleFor(GetSensitivity(bVertical));
 }
 
 float UTSSSettingsSubsystem::GetFOV(ETSSViewMode Mode) const

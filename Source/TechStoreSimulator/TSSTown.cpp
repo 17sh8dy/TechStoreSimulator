@@ -4,6 +4,7 @@
 #include "TSSDeliveryActors.h"
 #include "TSSStoreSubsystem.h"
 #include "TSSTownBackdrop.h"
+#include "TSSTownDistrict.h"
 #include "TSSBin.h"
 #include "TSSPasserby.h"
 #include "EngineUtils.h"
@@ -28,10 +29,19 @@ void UTSSTownSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	Super::OnWorldBeginPlay(InWorld);
 	Road = ATSSRoad::Find(&InWorld);
 	if (FParse::Param(FCommandLine::Get(), TEXT("TSSNoTraffic"))) bTraffic = false;
+	const bool bDistrict = Road.IsValid() && !FParse::Param(FCommandLine::Get(), TEXT("TSSNoDistrict"));
+	if (bDistrict)
+	{
+		if (ATSSTownDistrict* D = InWorld.SpawnActor<ATSSTownDistrict>(ATSSTownDistrict::StaticClass(), FTransform::Identity))
+		{
+			D->Build(Road.Get());
+			District = D;
+		}
+	}
 	if (Road.IsValid() && !FParse::Param(FCommandLine::Get(), TEXT("TSSNoBackdrop")))
 	{
 		if (ATSSTownBackdrop* Back = InWorld.SpawnActor<ATSSTownBackdrop>(ATSSTownBackdrop::StaticClass(), FTransform::Identity))
-			Back->Build(Road.Get());
+			Back->Build(Road.Get(), District.IsValid() ? ATSSTownDistrict::HalfU : 0.f, District.IsValid() ? ATSSTownDistrict::HalfV : 0.f);
 	}
 	if (Road.IsValid() && !FParse::Param(FCommandLine::Get(), TEXT("TSSNoBins")))
 	{
@@ -43,6 +53,14 @@ void UTSSTownSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("TSSNoPeople"))) bPeople = false;
 	RefreshNight();
+}
+
+float UTSSTownSubsystem::TrafficOverrun() const
+{
+	// Cars run the whole main street through the town and appear/vanish past its walls.
+	const ATSSRoad* R = Road.Get();
+	if (!District.IsValid() || !R) return 450.f;
+	return FMath::Max(450.f, ATSSTownDistrict::HalfU - R->GetLength() * 0.5f + 1200.f);
 }
 
 int32 UTSSTownSubsystem::CarCount() const
@@ -137,7 +155,7 @@ void UTSSTownSubsystem::TickTraffic(float Dt)
 		NextSpawn[Dir] = FMath::FRandRange(6.f, 15.f);
 		if (CarCount() >= 8) continue;
 		const bool bAlong = Dir == 0;
-		const float Start = bAlong ? -450.f : Len + 450.f;
+		const float Start = bAlong ? -TrafficOverrun() : Len + TrafficOverrun();   // out of sight, beyond the town's edge
 		// Never spawn on top of another car or a waiting truck.
 		bool bClear = true;
 		for (const TWeakObjectPtr<ATSSTrafficCar>& C : Cars)
